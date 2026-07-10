@@ -89,8 +89,7 @@ local Themes = {
 	}
 }
 
--- Set initial default state
-MacLib.CurrentTheme = Themes.Light
+MacLib.CurrentTheme = Themes.Dark
 local ThemeRegistry = {} 
 
 --// Functions
@@ -118,12 +117,10 @@ local function RegisterThemeElement(instance, property, themeKey, transparencyKe
 		TransparencyKey = transparencyKey
 	})
 
-	-- Apply the current color immediately
 	if MacLib.CurrentTheme[themeKey] then
 		instance[property] = MacLib.CurrentTheme[themeKey]
 	end
 
-	-- Apply transparency safely
 	if transparencyKey and MacLib.CurrentTheme[transparencyKey] then
 		local transparencyValue = MacLib.CurrentTheme[transparencyKey]
 
@@ -142,7 +139,6 @@ local function RegisterThemeElement(instance, property, themeKey, transparencyKe
 				instance.BackgroundTransparency = transparencyValue
 			end
 		else
-			-- Fallback for standard frames
 			instance.BackgroundTransparency = transparencyValue
 		end
 	end
