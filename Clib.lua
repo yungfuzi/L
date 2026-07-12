@@ -469,6 +469,7 @@ function Card:AddText(idx, config)
 	Label.TextSize = config.TextSize or 16
 	Label.TextXAlignment = config.TextXAlignment or Enum.TextXAlignment.Left
 	Label.TextYAlignment = config.TextYAlignment or Enum.TextYAlignment.Top
+	Label.RichText = true
 	Label.ZIndex = 3
 
 	local option = TextOption.new(Label, self.Content)
@@ -515,6 +516,7 @@ function Card:AddParagraph(idx, config)
 	BodyLabel.TextSize = config.TextSize or 14
 	BodyLabel.TextXAlignment = Enum.TextXAlignment.Left
 	BodyLabel.TextYAlignment = Enum.TextYAlignment.Top
+	BodyLabel.RichText = true
 	BodyLabel.ZIndex = 3
 
 	local option = ParagraphOption.new(Holder, TitleLabel, BodyLabel)
