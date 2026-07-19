@@ -1201,7 +1201,6 @@ local function BuildElementFunctions(Target, Body)
 		end
 		mainParent = mainParent or Holder
 
-		-- Đảm bảo folder DropdownPanels luôn tồn tại trong Main để chứa cả Style 1 và Style 2
 		local panelsFolder = mainParent:FindFirstChild("DropdownPanels")
 		if not panelsFolder then
 			panelsFolder = create("Folder", {
@@ -1215,15 +1214,14 @@ local function BuildElementFunctions(Target, Body)
 			scrollFrame = scrollFrame.Parent
 		end
 
-		-- Khởi tạo Menu Frame dựa vào Style nhưng tất cả đều nằm trong panelsFolder
 		local Menu
 		if style == 2 then
 			Menu = create("Frame", {
-				BackgroundTransparency = 1,
+				BackgroundTransparency = 0.15,
 				BorderSizePixel = 0,
 				Size = UDim2.new(0, 240, 1, 0),
 				AnchorPoint = Vector2.new(1, 0),
-				Position = UDim2.new(1, 250, 0, 0), -- Giấu sang bên phải màn hình
+				Position = UDim2.new(1, 250, 0, 0),
 				Visible = false,
 				ZIndex = 200,
 				Parent = panelsFolder,
@@ -1235,8 +1233,8 @@ local function BuildElementFunctions(Target, Body)
 				BorderSizePixel = 0,
 				Size = UDim2.new(0, 140, 0, 0),
 				Visible = false,
-				ZIndex = 200, -- Nâng ZIndex lên ngang hàng để đảm bảo đè lên nội dung khác tốt hơn
-				Parent = panelsFolder, -- CHUYỂN VÀO FOLDER CHUNG
+				ZIndex = 200, 
+				Parent = panelsFolder, 
 			})
 			create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = Menu })
 		end
@@ -1268,7 +1266,6 @@ local function BuildElementFunctions(Target, Body)
 		local SearchBox
 
 		if searchEnabled and style == 2 then
-			-- Style 2: circular search icon top-right that slides open into a search bar.
 			local SearchStrip = create("Frame", {
 				BackgroundTransparency = 1,
 				Position = UDim2.new(0, 10, 0, 14),
@@ -1298,7 +1295,7 @@ local function BuildElementFunctions(Target, Body)
 				Position = UDim2.new(0, 40, 0, 0),
 				Size = UDim2.new(1, -74, 1, 0),
 				FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
-				PlaceholderText = "Search...",
+				PlaceholderText = "",
 				Text = "",
 				TextSize = 13,
 				TextTransparency = 1,
@@ -1549,7 +1546,6 @@ local function BuildElementFunctions(Target, Body)
 			local absPos = DropdownBox.AbsolutePosition
 			local absSize = DropdownBox.AbsoluteSize
 			local mainPos = mainParent.AbsolutePosition
-			-- Vẫn tính toán chính xác vị trí tương đối so với mainParent cho Style 1
 			Menu.Position = UDim2.new(0, absPos.X - mainPos.X, 0, absPos.Y - mainPos.Y + absSize.Y + 4)
 			Menu.Size = UDim2.new(0, absSize.X, 0, Menu.Size.Y.Offset)
 		end
@@ -1562,7 +1558,7 @@ local function BuildElementFunctions(Target, Body)
 
 			if style == 2 then
 				Menu.Visible = true
-				Menu.BackgroundTransparency = 0
+				Menu.BackgroundTransparency = 0.15
 				Tween(Menu, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 					Position = UDim2.new(1, 0, 0, 0)
 				}):Play()
@@ -2056,6 +2052,175 @@ local function BuildElementFunctions(Target, Body)
 end
 
 
+
+local NotifyTypeMeta = {
+	Info    = { Color = Color3.fromRGB(80, 150, 255),  Icon = "rbxassetid://106205298246017" },
+	Success = { Color = Color3.fromRGB(52, 199, 89),   Icon = "rbxassetid://106205298246017" },
+	Warning = { Color = Color3.fromRGB(255, 180, 60),  Icon = "rbxassetid://106205298246017" },
+	Error   = { Color = Color3.fromRGB(235, 80, 80),   Icon = "rbxassetid://106205298246017" },
+}
+
+local NotifHolder = nil
+
+local function ensureNotifHolder()
+	if NotifHolder then return NotifHolder end
+
+	local gui = GetGui()
+	gui.Name = "ValkNotifications"
+
+	NotifHolder = create("Frame", {
+		Name = "NotifHolder",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -16, 1, -16),
+		Size = UDim2.new(0, 300, 1, -32),
+		Parent = gui,
+	})
+	create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		VerticalAlignment = Enum.VerticalAlignment.Bottom,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		Padding = UDim.new(0, 8),
+		Parent = NotifHolder,
+	})
+
+	return NotifHolder
+end
+
+local notifOrder = 0
+
+function Valk:Notify(settings)
+	settings = settings or {}
+	local notifType = settings.Type or "Info"
+	local meta = NotifyTypeMeta[notifType] or NotifyTypeMeta.Info
+	local duration = settings.Duration or 5
+
+	local holder = ensureNotifHolder()
+	notifOrder += 1
+
+	local Toast = create("Frame", {
+		Name = "Notification",
+		BorderSizePixel = 0,
+		ClipsDescendants = true,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = notifOrder,
+		BackgroundTransparency = 1,
+		Parent = holder,
+	})
+	create("UICorner", { CornerRadius = UDim.new(0, 12), Parent = Toast })
+	create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.85, Parent = Toast })
+	RegisterThemeElement(Toast, "BackgroundColor3", "BaseBackground")
+
+	local AccentBar = create("Frame", {
+		BorderSizePixel = 0,
+		BackgroundColor3 = meta.Color,
+		Size = UDim2.new(0, 4, 1, 0),
+		Parent = Toast,
+	})
+
+	local Icon = create("ImageLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 14, 0, 12),
+		Size = UDim2.new(0, 18, 0, 18),
+		Image = settings.Icon or meta.Icon,
+		ImageColor3 = meta.Color,
+		Parent = Toast,
+	})
+
+	local CloseButton = create("ImageButton", {
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, 10),
+		Size = UDim2.new(0, 16, 0, 16),
+		Image = "rbxassetid://116396312853810",
+		ImageColor3 = Color3.fromRGB(255, 255, 255),
+		Parent = Toast,
+	})
+	RegisterThemeElement(CloseButton, "ImageColor3", "TextMuted", "ImageTransparency")
+
+	local TitleLabel = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 42, 0, 10),
+		Size = UDim2.new(1, -64, 0, 18),
+		FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal),
+		Text = settings.Title or "Notification",
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Parent = Toast,
+	})
+	RegisterThemeElement(TitleLabel, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+
+	local ContentLabel = create("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 42, 0, 28),
+		Size = UDim2.new(1, -56, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+		Text = settings.Content or "",
+		TextSize = 12,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Parent = Toast,
+	})
+	RegisterThemeElement(ContentLabel, "TextColor3", "TextDim", "TextDimTransparency")
+
+	create("UIPadding", { PaddingBottom = UDim.new(0, 12), Parent = ContentLabel })
+
+	local ProgressTrack = create("Frame", {
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		BorderSizePixel = 0,
+		BackgroundColor3 = meta.Color,
+		BackgroundTransparency = 0.5,
+		Size = UDim2.new(1, 0, 0, 2),
+		Parent = Toast,
+	})
+
+	local dismissed = false
+	local NotifFunctions = { Instance = Toast }
+
+	local function dismiss()
+		if dismissed then return end
+		dismissed = true
+		local fadeTween = Tween(Toast, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 0),
+		})
+		Tween(AccentBar, TweenInfo.new(0.15), { BackgroundTransparency = 1 }):Play()
+		Tween(Icon, TweenInfo.new(0.15), { ImageTransparency = 1 }):Play()
+		Tween(TitleLabel, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
+		Tween(ContentLabel, TweenInfo.new(0.15), { TextTransparency = 1 }):Play()
+		fadeTween.Completed:Connect(function()
+			Toast:Destroy()
+		end)
+		fadeTween:Play()
+	end
+
+	function NotifFunctions:Close()
+		dismiss()
+	end
+
+	CloseButton.MouseButton1Click:Connect(dismiss)
+
+	Toast.BackgroundTransparency = 1
+	Tween(Toast, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0,
+	}):Play()
+	Tween(ProgressTrack, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+		Size = UDim2.new(0, 0, 0, 2),
+	}):Play()
+
+	if duration > 0 then
+		task.delay(duration, dismiss)
+	end
+
+	return NotifFunctions
+end
+
+
 function Valk:SetTheme(themeName)
 	local targetTheme = Themes[themeName]
 	if not targetTheme then
@@ -2225,11 +2390,11 @@ function Valk:Window(Settings)
 	end
 
 	local TextService = game:GetService("TextService")
-
+ 
 	local function getPillWidth(name)
 		local nameText = name
 		local handleText = "@" .. name
-
+ 
 		local nameSize = TextService:GetTextSize(
 			nameText, 14, Enum.Font.Roboto,
 			Vector2.new(math.huge, 16)
@@ -2238,38 +2403,42 @@ function Valk:Window(Settings)
 			handleText, 11, Enum.Font.Roboto,
 			Vector2.new(math.huge, 14)
 		)
-
+ 
 		local textWidth = math.max(nameSize.X, handleSize.X)
 		return math.clamp(32 + 4 + 8 + textWidth + 12, 90, 260)
 	end
-
+ 
 	local pillWidth = getPillWidth(Settings.Username or LocalPlayer.Name)
-
+ 
 	local settingsCog = nil
-
+ 
 	local cachedSettingsFunctions = nil
-
+ 
+	local PILL_COLLAPSED = 40
+ 
 	local UserPill = create("Frame", {
 		Name = "UserPill",
 		BorderSizePixel = 0,
+		ClipsDescendants = true,
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -24, 0.5, 0),
-		Size = UDim2.new(0, pillWidth, 0, 40),
+		Size = UDim2.new(0, PILL_COLLAPSED, 0, 40),
 		Parent = Header,
 	})
 	create("UICorner", { CornerRadius = UDim.new(0, 20), Parent = UserPill })
 	create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.7, Parent = UserPill })
 	RegisterThemeElement(UserPill, "BackgroundColor3", "ElementBackground", "ElementBackgroundTransparency")
-
+ 
 	local Avatar = create("ImageLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 4, 0.5, -16),
 		Size = UDim2.new(0, 32, 0, 32),
 		Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150",
+		ZIndex = 2,
 		Parent = UserPill,
 	})
 	create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Avatar })
-
+ 
 	local UsernameLabel = create("TextLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 44, 0, 4),
@@ -2277,11 +2446,12 @@ function Valk:Window(Settings)
 		FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
 		Text = Settings.Username or LocalPlayer.Name,
 		TextSize = 14,
+		TextTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = UserPill,
 	})
-	RegisterThemeElement(UsernameLabel, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
-
+	RegisterThemeElement(UsernameLabel, "TextColor3", "TextPrimary")
+ 
 	local HandleLabel = create("TextLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 44, 0, 20),
@@ -2289,10 +2459,48 @@ function Valk:Window(Settings)
 		FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
 		Text = "@" .. (Settings.Username or LocalPlayer.Name),
 		TextSize = 11,
+		TextTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = UserPill,
 	})
-	RegisterThemeElement(HandleLabel, "TextColor3", "TextDim", "TextDimTransparency")
+	RegisterThemeElement(HandleLabel, "TextColor3", "TextDim")
+ 
+	-- Hover: pill slides open like the type-2 dropdown search pill, revealing
+	-- username/handle. Since AnchorPoint.X = 1 the frame grows to the left, so
+	-- only Size needs to change; Position (and any Settings-cog offset) stays put.
+	local pillOpen = false
+ 
+	local function openPill()
+		if pillOpen then return end
+		pillOpen = true
+		Tween(UserPill, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = UDim2.new(0, pillWidth, 0, 40),
+		}):Play()
+		Tween(UsernameLabel, TweenInfo.new(0.2), { TextTransparency = 0 }):Play()
+		Tween(HandleLabel, TweenInfo.new(0.2), { TextTransparency = 0.35 }):Play()
+	end
+ 
+	local function closePill()
+		if not pillOpen then return end
+		pillOpen = false
+		Tween(UserPill, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Size = UDim2.new(0, PILL_COLLAPSED, 0, 40),
+		}):Play()
+		Tween(UsernameLabel, TweenInfo.new(0.12), { TextTransparency = 1 }):Play()
+		Tween(HandleLabel, TweenInfo.new(0.12), { TextTransparency = 1 }):Play()
+	end
+ 
+	UserPill.MouseEnter:Connect(openPill)
+	UserPill.MouseLeave:Connect(closePill)
+ 
+	local Divider = create("Frame", {
+		Name = "Divider",
+		BorderSizePixel = 0,
+		Position = UDim2.new(0.05, 0, 0, 78),
+		Size = UDim2.new(0.9, 0, 0, 1),
+		Parent = Main,
+	})
+	RegisterThemeElement(Divider, "BackgroundColor3", "DividerColor", "DividerTransparency")
 
 	local Divider = create("Frame", {
 		Name = "Divider",
