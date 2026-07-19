@@ -1,3 +1,5 @@
+-- pure AI
+
 local Valk = {
 	Options = {},
 	CurrentTheme = {},
