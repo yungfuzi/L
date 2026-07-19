@@ -987,14 +987,14 @@ local function BuildElementFunctions(Target, Body)
 				ZIndex = 1,
 				Parent = Dot,
 			})
-			
+
 			local hitbox = create("ImageButton", {
 				ImageTransparency = 1,
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1, 0, 1, 0),
 				Parent = Holder
 			})
-			
+
 			RegisterThemeElement(DotGlow, "ImageColor3", "Accent")
 
 			function setState(value)
@@ -1082,7 +1082,7 @@ local function BuildElementFunctions(Target, Body)
 
 		return RegisterOption(idx, ToggleFunctions)
 	end
-	
+
 	function Target:Dropdown(a, b)
 		local idx, dropdownSettings = ResolveArgs(a, b)
 		elementCount += 1
@@ -1439,92 +1439,92 @@ local function BuildElementFunctions(Target, Body)
 
 			for i, opt in ipairs(options) do
 				if matchesSearch(opt) then
-				visibleCount += 1
-				local optText = tostring(opt)
-				local sel = isSelected(opt)
+					visibleCount += 1
+					local optText = tostring(opt)
+					local sel = isSelected(opt)
 
-				local OptBtn = create("TextButton", {
-					BackgroundTransparency = 1,
-					BorderSizePixel = 0,
-					AutoButtonColor = false,
-					Text = "",
-					Size = UDim2.new(1, 0, 0, style == 2 and 34 or 28),
-					ZIndex = 202,
-					Parent = OptionList,
-				})
-				create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = OptBtn })
+					local OptBtn = create("TextButton", {
+						BackgroundTransparency = 1,
+						BorderSizePixel = 0,
+						AutoButtonColor = false,
+						Text = "",
+						Size = UDim2.new(1, 0, 0, style == 2 and 34 or 28),
+						ZIndex = 202,
+						Parent = OptionList,
+					})
+					create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = OptBtn })
 
-				local textColor = sel and Valk.CurrentTheme.TextPrimary or Valk.CurrentTheme.TextMuted
-				local fontWeight = sel and Enum.FontWeight.Bold or Enum.FontWeight.Regular
+					local textColor = sel and Valk.CurrentTheme.TextPrimary or Valk.CurrentTheme.TextMuted
+					local fontWeight = sel and Enum.FontWeight.Bold or Enum.FontWeight.Regular
 
-				local OptLabel = create("TextLabel", {
-					BackgroundTransparency = 1,
-					Position = UDim2.new(0, 32, 0, 0),
-					Size = UDim2.new(1, -40, 1, 0),
-					FontFace = Font.new("rbxasset://fonts/families/Roboto.json", fontWeight, Enum.FontStyle.Normal),
-					Text = optText,
-					TextSize = style == 2 and 14 or 13,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					TextColor3 = textColor,
-					ZIndex = 202,
-					Parent = OptBtn,
-				})
+					local OptLabel = create("TextLabel", {
+						BackgroundTransparency = 1,
+						Position = UDim2.new(0, 32, 0, 0),
+						Size = UDim2.new(1, -40, 1, 0),
+						FontFace = Font.new("rbxasset://fonts/families/Roboto.json", fontWeight, Enum.FontStyle.Normal),
+						Text = optText,
+						TextSize = style == 2 and 14 or 13,
+						TextXAlignment = Enum.TextXAlignment.Left,
+						TextColor3 = textColor,
+						ZIndex = 202,
+						Parent = OptBtn,
+					})
 
-				local Dot = create("Frame", {
-					AnchorPoint = Vector2.new(0, 0.5),
-					Position = UDim2.new(0, 10, 0.5, 0),
-					BackgroundColor3 = sel and Valk.CurrentTheme.Accent or Valk.CurrentTheme.DividerColor,
-					Size = sel and UDim2.new(0, 8, 0, 8) or UDim2.new(0, 6, 0, 6),
-					BorderSizePixel = 0,
-					ZIndex = 203,
-					Parent = OptBtn,
-				})
-				create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Dot })
-				RegisterThemeElement(Dot, "BackgroundColor3", sel and "Accent" or "DividerColor")
+					local Dot = create("Frame", {
+						AnchorPoint = Vector2.new(0, 0.5),
+						Position = UDim2.new(0, 10, 0.5, 0),
+						BackgroundColor3 = sel and Valk.CurrentTheme.Accent or Valk.CurrentTheme.DividerColor,
+						Size = sel and UDim2.new(0, 8, 0, 8) or UDim2.new(0, 6, 0, 6),
+						BorderSizePixel = 0,
+						ZIndex = 203,
+						Parent = OptBtn,
+					})
+					create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Dot })
+					RegisterThemeElement(Dot, "BackgroundColor3", sel and "Accent" or "DividerColor")
 
-				local DotGlow = create("ImageLabel", {
-					BackgroundTransparency = 1,
-					AnchorPoint = Vector2.new(0.5, 0.5),
-					Position = UDim2.new(0.5, 0, 0.5, 0),
-					Size = UDim2.new(1, 14, 1, 14),
-					Image = "rbxassetid://118051995939704",
-					ImageColor3 = Valk.CurrentTheme.Accent,
-					ImageTransparency = sel and 0.3 or 1,
-					ZIndex = 202,
-					Parent = Dot,
-				})
-				RegisterThemeElement(DotGlow, "ImageColor3", "Accent")
+					local DotGlow = create("ImageLabel", {
+						BackgroundTransparency = 1,
+						AnchorPoint = Vector2.new(0.5, 0.5),
+						Position = UDim2.new(0.5, 0, 0.5, 0),
+						Size = UDim2.new(1, 14, 1, 14),
+						Image = "rbxassetid://118051995939704",
+						ImageColor3 = Valk.CurrentTheme.Accent,
+						ImageTransparency = sel and 0.3 or 1,
+						ZIndex = 202,
+						Parent = Dot,
+					})
+					RegisterThemeElement(DotGlow, "ImageColor3", "Accent")
 
-				OptBtn.MouseEnter:Connect(function()
-					Tween(OptLabel, TweenInfo.new(0.1), {
-						TextColor3 = Valk.CurrentTheme.TextPrimary,
-					}):Play()
-				end)
+					OptBtn.MouseEnter:Connect(function()
+						Tween(OptLabel, TweenInfo.new(0.1), {
+							TextColor3 = Valk.CurrentTheme.TextPrimary,
+						}):Play()
+					end)
 
-				OptBtn.MouseLeave:Connect(function()
-					local targetColor = isSelected(opt) and Valk.CurrentTheme.TextPrimary or Valk.CurrentTheme.TextMuted
-					Tween(OptLabel, TweenInfo.new(0.1), {
-						TextColor3 = targetColor,
-					}):Play()
-				end)
+					OptBtn.MouseLeave:Connect(function()
+						local targetColor = isSelected(opt) and Valk.CurrentTheme.TextPrimary or Valk.CurrentTheme.TextMuted
+						Tween(OptLabel, TweenInfo.new(0.1), {
+							TextColor3 = targetColor,
+						}):Play()
+					end)
 
-				OptBtn.MouseButton1Click:Connect(function()
-					toggleSelect(opt)
-					ValueLabel.Text = getDisplayText()
+					OptBtn.MouseButton1Click:Connect(function()
+						toggleSelect(opt)
+						ValueLabel.Text = getDisplayText()
 
-					if dropdownSettings.Callback then
-						dropdownSettings.Callback(multi and selected or selected)
-					end
+						if dropdownSettings.Callback then
+							dropdownSettings.Callback(multi and selected or selected)
+						end
 
-					if not multi then
-						buildOptions()
-						task.delay(0.15, closeMenu)
-					else
-						buildOptions()
-					end
-				end)
+						if not multi then
+							buildOptions()
+							task.delay(0.15, closeMenu)
+						else
+							buildOptions()
+						end
+					end)
 
-				table.insert(optionButtons, OptBtn)
+					table.insert(optionButtons, OptBtn)
 				end
 			end
 
@@ -2357,6 +2357,7 @@ function Valk:Window(Settings)
 		local TabButton = create("TextButton", {
 			Name = tabSettings.Name or ("Tab" .. tabIndex),
 			BorderSizePixel = 0,
+			BackgroundTransparency = 1,
 			Size = UDim2.new(1, 0, 0, 34),
 			AutoButtonColor = false,
 			Text = "",
@@ -2377,6 +2378,13 @@ function Valk:Window(Settings)
 		TabGradient.Color = ColorSequence.new(
 			Color3.fromRGB(255, 255, 255),
 			Color3.fromRGB(53, 53, 53)
+		)
+		
+		local StrokeGradient = create("UIGradient", { Enabled = true, Parent = TabStroke })
+
+		StrokeGradient.Color = ColorSequence.new(
+			Color3.fromRGB(0, 0, 0),
+			Color3.fromRGB(255, 255, 255)
 		)
 
 
@@ -2500,8 +2508,6 @@ function Valk:Window(Settings)
 							GroupTransparency = 1,
 						})
 						hideTween.Completed:Connect(function()
-							-- Guard against a rapid re-select bringing this
-							-- page back before the fade-out tween finished.
 							if not wrapper:GetAttribute("KeepVisible") then
 								wrapper.Visible = false
 							end
@@ -2512,7 +2518,6 @@ function Valk:Window(Settings)
 
 				Tween(t.Button, TweenInfo.new(0.15), {
 					BackgroundColor3 = isActive and Valk.CurrentTheme.TabActiveBackground or Valk.CurrentTheme.BaseBackground,
-					BackgroundTransparency = isActive and Valk.CurrentTheme.TabActiveTransparency or 1,
 				}):Play()
 
 				Tween(t.DotGlow, TweenInfo.new(0.2), {
