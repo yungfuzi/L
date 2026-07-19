@@ -168,6 +168,221 @@ local function create(class, props, children)
 	return inst
 end
 
+local function ApplyVisible(instance, config, functions)
+	if config.Visible ~= nil then
+		instance.Visible = config.Visible
+	end
+	function functions:SetVisible(state)
+		instance.Visible = state
+	end
+end
+
+local function BuildTooltip(AnchorFrame, cfg)
+	cfg = cfg or {}
+	local text = cfg.Text or ""
+	local ttype = cfg.Type or "Hover"
+	local delay = cfg.Delay or 0.3
+	local richText = cfg.RichText or false
+
+	local rootParent = AnchorFrame
+	while rootParent and rootParent.Name ~= "Main" and rootParent.Parent do
+		rootParent = rootParent.Parent
+	end
+	rootParent = rootParent or AnchorFrame
+
+	local TooltipFrame = create("Frame", {
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Visible = false,
+		ZIndex = 500,
+		Parent = rootParent,
+	})
+	create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = TooltipFrame })
+	create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.85, Parent = TooltipFrame })
+	RegisterThemeElement(TooltipFrame, "BackgroundColor3", "BaseBackground")
+
+	create("UIPadding", {
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 6),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 10),
+		Parent = TooltipFrame,
+	})
+
+	local TooltipLabel = create("TextLabel", {
+		BackgroundTransparency = 1,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Size = UDim2.new(0, 0, 0, 0),
+		FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+		Text = text,
+		RichText = richText,
+		TextSize = 12,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = TooltipFrame,
+	})
+	RegisterThemeElement(TooltipLabel, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+
+	local function positionTooltip()
+		local anchorPos = AnchorFrame.AbsolutePosition
+		local anchorSize = AnchorFrame.AbsoluteSize
+		local rootPos = rootParent.AbsolutePosition
+		TooltipFrame.AnchorPoint = Vector2.new(0.5, 1)
+		TooltipFrame.Position = UDim2.new(0, anchorPos.X - rootPos.X + anchorSize.X / 2, 0, anchorPos.Y - rootPos.Y - 8)
+	end
+
+	local isShown = false
+	local showToken = 0
+
+	local function fadeIn()
+		positionTooltip()
+		TooltipFrame.Visible = true
+		TooltipFrame.BackgroundTransparency = 1
+		TooltipLabel.TextTransparency = 1
+		Tween(TooltipFrame, TweenInfo.new(0.15), { BackgroundTransparency = 0.1 }):Play()
+		Tween(TooltipLabel, TweenInfo.new(0.15), { TextTransparency = 0 }):Play()
+		isShown = true
+	end
+
+	local function fadeOut()
+		if not isShown then return end
+		isShown = false
+		local closeTween = Tween(TooltipFrame, TweenInfo.new(0.12), { BackgroundTransparency = 1 })
+		Tween(TooltipLabel, TweenInfo.new(0.12), { TextTransparency = 1 }):Play()
+		closeTween.Completed:Connect(function()
+			if not isShown then
+				TooltipFrame.Visible = false
+			end
+		end)
+		closeTween:Play()
+	end
+
+	local TooltipFunctions = { Instance = TooltipFrame }
+
+	if ttype == "Button" then
+		local IconBtn = create("ImageButton", {
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -4, 0.5, 0),
+			Size = UDim2.new(0, 16, 0, 16),
+			Image = cfg.Icon or "rbxassetid://74115333842618",
+			ZIndex = 50,
+			Parent = AnchorFrame,
+		})
+
+		IconBtn.MouseButton1Click:Connect(function()
+			if isShown then
+				fadeOut()
+			else
+				fadeIn()
+			end
+		end)
+
+		TooltipFunctions.Button = IconBtn
+	else
+		AnchorFrame.MouseEnter:Connect(function()
+			showToken += 1
+			local myToken = showToken
+			task.delay(delay, function()
+				if myToken == showToken then
+					fadeIn()
+				end
+			end)
+		end)
+
+		AnchorFrame.MouseLeave:Connect(function()
+			showToken += 1
+			fadeOut()
+		end)
+	end
+
+	function TooltipFunctions:SetText(newText)
+		text = newText
+		TooltipLabel.Text = newText
+	end
+
+	function TooltipFunctions:Show()
+		fadeIn()
+	end
+
+	function TooltipFunctions:Hide()
+		fadeOut()
+	end
+
+	return TooltipFunctions
+end
+
+-- Attaches chained addon methods (:Keybind, :Tooltip) onto an element's functions table.
+-- opts.Get/opts.Set describe a toggle-like state for default Keybind behavior; opts.Fire
+-- describes a button-like default action. Both are optional.
+local function AttachAddons(Functions, MainFrame, opts)
+	opts = opts or {}
+	local getState = opts.Get
+	local setState = opts.Set
+	local fireAction = opts.Fire
+
+	function Functions:Keybind(a, b)
+		local idx, keybindSettings = ResolveArgs(a, b)
+		local key = keybindSettings.Key
+		local mode = keybindSettings.Mode or "Toggle"
+		local callback = keybindSettings.Callback
+		local preventToggle = keybindSettings.PreventToggle
+
+		local function trigger(active)
+			if callback then
+				callback(active)
+			end
+			if not (callback and preventToggle) then
+				if setState and getState then
+					if mode == "Hold" then
+						setState(active)
+					elseif active then
+						setState(not getState())
+					end
+				elseif fireAction and active then
+					fireAction()
+				end
+			end
+		end
+
+		local beganConn = UserInputService.InputBegan:Connect(function(input, processed)
+			if processed then return end
+			if key and input.KeyCode == key then
+				trigger(true)
+			end
+		end)
+
+		local endedConn
+		if mode == "Hold" then
+			endedConn = UserInputService.InputEnded:Connect(function(input)
+				if key and input.KeyCode == key then
+					trigger(false)
+				end
+			end)
+		end
+
+		local KeybindFunctions = { Instance = MainFrame }
+
+		function KeybindFunctions:SetKey(newKey)
+			key = newKey
+		end
+
+		function KeybindFunctions:Destroy()
+			beganConn:Disconnect()
+			if endedConn then
+				endedConn:Disconnect()
+			end
+		end
+
+		return RegisterOption(idx, KeybindFunctions)
+	end
+
+	function Functions:Tooltip(tooltipSettings)
+		return BuildTooltip(MainFrame, tooltipSettings)
+	end
+end
+
 local function MakeDraggable(frame, dragHandle)
 	local dragging, dragInput, dragStart, startPos
 
@@ -229,6 +444,9 @@ local function BuildElementFunctions(Target, Body)
 			return Label.Text
 		end
 
+		ApplyVisible(Label, labelSettings, LabelFunctions)
+		AttachAddons(LabelFunctions, Label, {})
+
 		return RegisterOption(idx, LabelFunctions)
 	end
 
@@ -264,6 +482,40 @@ local function BuildElementFunctions(Target, Body)
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Parent = CardHolder,
 		})
+
+		if cardSettings.BackgroundImage then
+			local BgImage = create("ImageLabel", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				Image = cardSettings.BackgroundImage,
+				ScaleType = Enum.ScaleType.Crop,
+				ZIndex = 0,
+				Parent = CardHolder,
+			})
+			create("UICorner", {
+				TopLeftRadius = TL, TopRightRadius = TR,
+				BottomRightRadius = BR, BottomLeftRadius = BL,
+				Parent = BgImage,
+			})
+		end
+
+		if cardSettings.BackgroundVideo then
+			local BgVideo = create("VideoFrame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 1, 0),
+				Video = cardSettings.BackgroundVideo,
+				Looped = true,
+				Playing = true,
+				Volume = 0,
+				ZIndex = 0,
+				Parent = CardHolder,
+			})
+			create("UICorner", {
+				TopLeftRadius = TL, TopRightRadius = TR,
+				BottomRightRadius = BR, BottomLeftRadius = BL,
+				Parent = BgVideo,
+			})
+		end
 
 		local Gradient = create("UIGradient", {
 			Parent = CardHolder,
@@ -352,6 +604,52 @@ local function BuildElementFunctions(Target, Body)
 			end
 		end
 
+		if cardSettings.PrimaryButton or cardSettings.SecondaryButton then
+			local ButtonRow = create("Frame", {
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.new(0, iconWidth + 12, 1, -12),
+				Size = UDim2.new(1, -(iconWidth + 24), 0, 30),
+				Parent = CardHolder,
+			})
+			create("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				Padding = UDim.new(0, 8),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Parent = ButtonRow,
+			})
+
+			local function buildCardBtn(btnConfig, order)
+				local CardBtn = create("TextButton", {
+					AutoButtonColor = false,
+					BackgroundColor3 = btnConfig.Color or Color3.fromRGB(255, 255, 255),
+					BorderSizePixel = 0,
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.new(0, 0, 1, 0),
+					FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal),
+					Text = "  " .. (btnConfig.Text or "Action") .. "  ",
+					TextSize = 13,
+					TextColor3 = btnConfig.TextColor or Color3.fromRGB(0, 0, 0),
+					LayoutOrder = order,
+					Parent = ButtonRow,
+				})
+				create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = CardBtn })
+				CardBtn.MouseButton1Click:Connect(function()
+					if btnConfig.Callback then
+						btnConfig.Callback()
+					end
+				end)
+				return CardBtn
+			end
+
+			if cardSettings.PrimaryButton then
+				buildCardBtn(cardSettings.PrimaryButton, 1)
+			end
+			if cardSettings.SecondaryButton then
+				buildCardBtn(cardSettings.SecondaryButton, 2)
+			end
+		end
+
 		local direction = cardSettings.Gradient.Direction or Vector2.new(-1, 0)
 		Gradient.Offset = direction
 
@@ -404,12 +702,15 @@ local function BuildElementFunctions(Target, Body)
 			end
 		end
 
+		ApplyVisible(CardHolder, cardSettings, CardFunctions)
+		AttachAddons(CardFunctions, CardHolder, {})
+
 		return RegisterOption(idx, CardFunctions)
 	end
 
-	-- Divider(idx) or Divider()
-	function Target:Divider(a)
-		local idx = type(a) ~= "table" and a or nil
+	-- Divider(idx, dividerSettings) or Divider(dividerSettings) or Divider(idx) or Divider()
+	function Target:Divider(a, b)
+		local idx, dividerSettings = ResolveArgs(a, b)
 
 		local Line = create("Frame", {
 			BorderSizePixel = 0,
@@ -419,7 +720,78 @@ local function BuildElementFunctions(Target, Body)
 		RegisterThemeElement(Line, "BackgroundColor3", "DividerColor", "DividerTransparency")
 
 		local DividerFunctions = { Instance = Line }
+
+		ApplyVisible(Line, dividerSettings, DividerFunctions)
+		AttachAddons(DividerFunctions, Line, {})
+
 		return RegisterOption(idx, DividerFunctions)
+	end
+
+	-- Paragraph(idx, paragraphSettings) or Paragraph(paragraphSettings)
+	function Target:Paragraph(a, b)
+		local idx, paragraphSettings = ResolveArgs(a, b)
+
+		local Holder = create("Frame", {
+			BackgroundTransparency = 1,
+			AutomaticSize = Enum.AutomaticSize.Y,
+			Size = UDim2.new(1, 0, 0, 0),
+			Parent = Body,
+		})
+
+		local TitleLabel
+		if paragraphSettings.Title then
+			TitleLabel = create("TextLabel", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 20),
+				FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal),
+				Text = paragraphSettings.Title,
+				RichText = paragraphSettings.RichText or false,
+				TextSize = 15,
+				TextWrapped = paragraphSettings.TextWrapped ~= false,
+				TextXAlignment = paragraphSettings.TitleAlignmentX or Enum.TextXAlignment.Left,
+				LayoutOrder = 1,
+				Parent = Holder,
+			})
+			RegisterThemeElement(TitleLabel, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+		end
+
+		local DescLabel
+		if paragraphSettings.Desc then
+			DescLabel = create("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 0, 0, TitleLabel and 24 or 0),
+				Size = UDim2.new(1, 0, 0, 16),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+				Text = paragraphSettings.Desc,
+				RichText = paragraphSettings.RichText or false,
+				TextSize = 13,
+				TextWrapped = paragraphSettings.TextWrapped ~= false,
+				TextXAlignment = paragraphSettings.DescAlignmentX or Enum.TextXAlignment.Left,
+				LayoutOrder = 2,
+				Parent = Holder,
+			})
+			RegisterThemeElement(DescLabel, "TextColor3", "TextDim", "TextDimTransparency")
+		end
+
+		local ParagraphFunctions = { Instance = Holder, TitleLabel = TitleLabel, DescLabel = DescLabel }
+
+		function ParagraphFunctions:SetTitle(text)
+			if TitleLabel then
+				TitleLabel.Text = text
+			end
+		end
+
+		function ParagraphFunctions:SetDesc(text)
+			if DescLabel then
+				DescLabel.Text = text
+			end
+		end
+
+		ApplyVisible(Holder, paragraphSettings, ParagraphFunctions)
+		AttachAddons(ParagraphFunctions, Holder, {})
+
+		return RegisterOption(idx, ParagraphFunctions)
 	end
 
 	-- Button(idx, buttonSettings) or Button(buttonSettings)
@@ -521,6 +893,13 @@ local function BuildElementFunctions(Target, Body)
 				callback()
 			end
 		end
+
+		ApplyVisible(Btn, buttonSettings, ButtonFunctions)
+		AttachAddons(ButtonFunctions, Btn, {
+			Fire = function()
+				ButtonFunctions:Fire()
+			end,
+		})
 
 		return RegisterOption(idx, ButtonFunctions)
 	end
@@ -691,6 +1070,16 @@ local function BuildElementFunctions(Target, Body)
 			end
 		end
 
+		ApplyVisible(Holder, toggleSettings, ToggleFunctions)
+		AttachAddons(ToggleFunctions, Holder, {
+			Get = function()
+				return ToggleFunctions:Get()
+			end,
+			Set = function(value)
+				ToggleFunctions:Set(value)
+			end,
+		})
+
 		return RegisterOption(idx, ToggleFunctions)
 	end
 	
@@ -853,12 +1242,15 @@ local function BuildElementFunctions(Target, Body)
 		end
 		RegisterThemeElement(Menu, "BackgroundColor3", "BaseBackground")
 
+		local searchEnabled = dropdownSettings.Search or false
+		local searchOffset = searchEnabled and 32 or 0
+
 		local OptionList = create("ScrollingFrame", {
 			Active = true,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			Size = style == 2 and UDim2.new(1, -20, 1, -40) or UDim2.new(1, -8, 1, -8),
-			Position = style == 2 and UDim2.new(0, 10, 0, 20) or UDim2.new(0, 4, 0, 4),
+			Size = style == 2 and UDim2.new(1, -20, 1, -40 - searchOffset) or UDim2.new(1, -8, 1, -8 - searchOffset),
+			Position = style == 2 and UDim2.new(0, 10, 0, 20 + searchOffset) or UDim2.new(0, 4, 0, 4 + searchOffset),
 			ScrollBarThickness = style == 2 and 0 or 0,
 			ScrollBarImageColor3 = Valk.CurrentTheme.DividerColor,
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
@@ -871,6 +1263,127 @@ local function BuildElementFunctions(Target, Body)
 			Padding = UDim.new(0, 2),
 			Parent = OptionList,
 		})
+
+		local searchQuery = ""
+		local SearchBox
+
+		if searchEnabled and style == 2 then
+			-- Style 2: circular search icon top-right that slides open into a search bar.
+			local SearchStrip = create("Frame", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 10, 0, 14),
+				Size = UDim2.new(1, -20, 0, 32),
+				ClipsDescendants = true,
+				ZIndex = 202,
+				Parent = Menu,
+			})
+
+			local SearchPill = create("Frame", {
+				BackgroundTransparency = 0,
+				BorderSizePixel = 0,
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, 0, 0, 0),
+				Size = UDim2.new(0, 32, 0, 32),
+				ZIndex = 202,
+				Parent = SearchStrip,
+			})
+			create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = SearchPill })
+			create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.8, Parent = SearchPill })
+			RegisterThemeElement(SearchPill, "BackgroundColor3", "ElementBackground", "ElementBackgroundTransparency")
+
+			SearchBox = create("TextBox", {
+				BackgroundTransparency = 1,
+				ClearTextOnFocus = false,
+				TextEditable = false,
+				Position = UDim2.new(0, 40, 0, 0),
+				Size = UDim2.new(1, -74, 1, 0),
+				FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+				PlaceholderText = "Search...",
+				Text = "",
+				TextSize = 13,
+				TextTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = 203,
+				Parent = SearchPill,
+			})
+			RegisterThemeElement(SearchBox, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+
+			local SearchIcon = create("ImageButton", {
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.new(0, 16, 0.5, 0),
+				Size = UDim2.new(0, 18, 0, 18),
+				Image = "rbxassetid://72296609649861",
+				ZIndex = 204,
+				Parent = SearchPill,
+			})
+			RegisterThemeElement(SearchIcon, "ImageColor3", "TextPrimary", "TextPrimaryTransparency")
+
+			local searchBarOpen = false
+
+			local function openSearchBar()
+				if searchBarOpen then return end
+				searchBarOpen = true
+				local fullWidth = SearchStrip.AbsoluteSize.X
+				Tween(SearchPill, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+					Size = UDim2.new(0, fullWidth, 0, 32),
+				}):Play()
+				task.delay(0.15, function()
+					if not searchBarOpen then return end
+					SearchBox.TextEditable = true
+					Tween(SearchBox, TweenInfo.new(0.15), { TextTransparency = 0 }):Play()
+					SearchBox:CaptureFocus()
+				end)
+			end
+
+			local function closeSearchBar()
+				if not searchBarOpen then return end
+				searchBarOpen = false
+				SearchBox:ReleaseFocus()
+				SearchBox.TextEditable = false
+				Tween(SearchBox, TweenInfo.new(0.1), { TextTransparency = 1 }):Play()
+				Tween(SearchPill, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+					Size = UDim2.new(0, 32, 0, 32),
+				}):Play()
+			end
+
+			SearchIcon.MouseButton1Click:Connect(function()
+				if searchBarOpen then
+					closeSearchBar()
+				else
+					openSearchBar()
+				end
+			end)
+
+			SearchBox.FocusLost:Connect(function()
+				if SearchBox.Text == "" then
+					closeSearchBar()
+				end
+			end)
+		elseif searchEnabled then
+			SearchBox = create("TextBox", {
+				BackgroundTransparency = 0,
+				BorderSizePixel = 0,
+				ClearTextOnFocus = false,
+				Position = UDim2.new(0, 4, 0, 4),
+				Size = UDim2.new(1, -8, 0, 24),
+				FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+				PlaceholderText = "Search...",
+				Text = "",
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = 202,
+				Parent = Menu,
+			})
+			create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = SearchBox })
+			RegisterThemeElement(SearchBox, "BackgroundColor3", "ElementBackground", "ElementBackgroundTransparency")
+			RegisterThemeElement(SearchBox, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+
+			create("UIPadding", {
+				PaddingLeft = UDim.new(0, 8),
+				Parent = SearchBox,
+			})
+		end
 
 		local optionButtons = {}
 		local isOpen = false
@@ -910,13 +1423,23 @@ local function BuildElementFunctions(Target, Body)
 			end
 		end
 
+		local visibleCount = 0
+
+		local function matchesSearch(opt)
+			if not searchEnabled or searchQuery == "" then return true end
+			return string.find(string.lower(tostring(opt)), string.lower(searchQuery), 1, true) ~= nil
+		end
+
 		local function buildOptions()
 			for _, btn in ipairs(optionButtons) do
 				btn:Destroy()
 			end
 			table.clear(optionButtons)
+			visibleCount = 0
 
 			for i, opt in ipairs(options) do
+				if matchesSearch(opt) then
+				visibleCount += 1
 				local optText = tostring(opt)
 				local sel = isSelected(opt)
 
@@ -1002,7 +1525,23 @@ local function BuildElementFunctions(Target, Body)
 				end)
 
 				table.insert(optionButtons, OptBtn)
+				end
 			end
+
+			if searchEnabled and isOpen and style ~= 2 then
+				local itemCount = math.min(visibleCount, maxVisible)
+				local boxWidth = DropdownBox.AbsoluteSize.X
+				Tween(Menu, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Size = UDim2.new(0, boxWidth, 0, itemCount * 30 + 8 + searchOffset),
+				}):Play()
+			end
+		end
+
+		if searchEnabled then
+			SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+				searchQuery = SearchBox.Text
+				buildOptions()
+			end)
 		end
 
 		local function updateMenuPosition()
@@ -1030,8 +1569,8 @@ local function BuildElementFunctions(Target, Body)
 				Tween(ArrowIcon, TweenInfo.new(0.2), { Rotation = 90 }):Play()
 			else
 				updateMenuPosition()
-				local itemCount = math.min(#options, maxVisible)
-				local menuHeight = itemCount * 30 + 8
+				local itemCount = math.min(visibleCount, maxVisible)
+				local menuHeight = itemCount * 30 + 8 + searchOffset
 				local boxWidth = DropdownBox.AbsoluteSize.X
 
 				Menu.Size = UDim2.new(0, boxWidth, 0, 0)
@@ -1188,6 +1727,9 @@ local function BuildElementFunctions(Target, Body)
 			Holder:Destroy()
 		end
 
+		ApplyVisible(Holder, dropdownSettings, DropdownFunctions)
+		AttachAddons(DropdownFunctions, Holder, {})
+
 		return RegisterOption(idx, DropdownFunctions)
 	end
 
@@ -1282,7 +1824,234 @@ local function BuildElementFunctions(Target, Body)
 			return value
 		end
 
+		ApplyVisible(Holder, sliderSettings, SliderFunctions)
+		AttachAddons(SliderFunctions, Holder, {
+			Get = function()
+				return SliderFunctions:Get()
+			end,
+			Set = function(v)
+				SliderFunctions:Set(v)
+			end,
+		})
+
 		return RegisterOption(idx, SliderFunctions)
+	end
+
+	-- ChipSelection(idx, chipSettings) or ChipSelection(chipSettings)
+	-- ChipSelection(idx, chipSettings) or ChipSelection(chipSettings)
+	function Target:ChipSelection(a, b)
+		local idx, chipSettings = ResolveArgs(a, b)
+		elementCount += 1
+
+		local options = chipSettings.Options or {}
+		local multi = chipSettings.Multi
+		if multi == nil then multi = true end
+
+		local selected = chipSettings.Default
+		if multi then
+			selected = type(selected) == "table" and selected or {}
+		end
+
+		local hasDescription = chipSettings.Description and chipSettings.Description ~= ""
+
+		local Holder = create("Frame", {
+			BackgroundTransparency = 1,
+			AutomaticSize = Enum.AutomaticSize.Y,
+			Size = UDim2.new(1, 0, 0, 0),
+			Parent = Body,
+		})
+
+		local NameLabel = create("TextLabel", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 20),
+			FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal),
+			Text = chipSettings.Name or "Chips",
+			TextSize = 15,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Parent = Holder,
+		})
+		RegisterThemeElement(NameLabel, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+
+		local DescriptionLabel
+		if hasDescription then
+			DescriptionLabel = create("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 0, 0, 20),
+				Size = UDim2.new(1, 0, 0, 16),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+				Text = chipSettings.Description,
+				TextSize = 12,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Parent = Holder,
+			})
+			RegisterThemeElement(DescriptionLabel, "TextColor3", "TextDim", "TextDimTransparency")
+		end
+
+		local ChipArea = create("Frame", {
+			BackgroundTransparency = 1,
+			AutomaticSize = Enum.AutomaticSize.Y,
+			Position = UDim2.new(0, 0, 0, hasDescription and 42 or 24),
+			Size = UDim2.new(1, 0, 0, 0),
+			Parent = Holder,
+		})
+
+		create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			Wraps = true,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 6),
+			Parent = ChipArea,
+		})
+
+		local chipButtons = {}
+
+		local function isSelected(opt)
+			if multi then
+				for _, v in ipairs(selected) do
+					if tostring(v) == tostring(opt) then return true end
+				end
+				return false
+			else
+				return selected ~= nil and tostring(selected) == tostring(opt)
+			end
+		end
+
+		local function toggleSelect(opt)
+			if multi then
+				local found = false
+				for i, v in ipairs(selected) do
+					if tostring(v) == tostring(opt) then
+						table.remove(selected, i)
+						found = true
+						break
+					end
+				end
+				if not found then
+					table.insert(selected, opt)
+				end
+			else
+				if selected ~= nil and tostring(selected) == tostring(opt) then
+					selected = nil
+				else
+					selected = opt
+				end
+			end
+		end
+
+		local function fireCallback()
+			if chipSettings.Callback then
+				chipSettings.Callback(multi and selected or selected)
+			end
+		end
+
+		local buildChips
+
+		function buildChips()
+			for _, c in ipairs(chipButtons) do
+				c:Destroy()
+			end
+			table.clear(chipButtons)
+
+			for i, opt in ipairs(options) do
+				local sel = isSelected(opt)
+
+				local Chip = create("TextButton", {
+					AutoButtonColor = false,
+					BorderSizePixel = 0,
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.new(0, 0, 0, 28),
+					Text = "",
+					LayoutOrder = i,
+					Parent = ChipArea,
+				})
+				create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Chip })
+				create("UIPadding", {
+					PaddingLeft = UDim.new(0, 14),
+					PaddingRight = UDim.new(0, 14),
+					Parent = Chip,
+				})
+
+				if sel then
+					Chip.BackgroundColor3 = Valk.CurrentTheme.Accent
+					Chip.BackgroundTransparency = 0.1
+				else
+					Chip.BackgroundTransparency = Valk.CurrentTheme.ElementBackgroundTransparency
+					RegisterThemeElement(Chip, "BackgroundColor3", "ElementBackground", "ElementBackgroundTransparency")
+				end
+
+				create("UIStroke", {
+					Color = Color3.fromRGB(255, 255, 255),
+					Transparency = sel and 0.6 or 0.85,
+					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+					Parent = Chip,
+				})
+
+				local ChipLabel = create("TextLabel", {
+					BackgroundTransparency = 1,
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.new(0, 0, 1, 0),
+					FontFace = Font.new("rbxasset://fonts/families/Roboto.json", sel and Enum.FontWeight.Bold or Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+					Text = tostring(opt),
+					TextSize = 13,
+					TextColor3 = Color3.fromRGB(255, 255, 255),
+					Parent = Chip,
+				})
+
+				if sel then
+					ChipLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+				else
+					RegisterThemeElement(ChipLabel, "TextColor3", "TextMuted", "TextMutedTransparency")
+				end
+
+				Chip.MouseButton1Click:Connect(function()
+					toggleSelect(opt)
+					buildChips()
+					fireCallback()
+				end)
+
+				table.insert(chipButtons, Chip)
+			end
+		end
+
+		buildChips()
+
+		local ChipFunctions = { Instance = Holder }
+
+		function ChipFunctions:SetOptions(newOptions)
+			options = newOptions or {}
+			buildChips()
+		end
+
+		function ChipFunctions:SetValue(value)
+			if multi then
+				selected = type(value) == "table" and value or {}
+			else
+				selected = value
+			end
+			buildChips()
+			fireCallback()
+		end
+
+		function ChipFunctions:GetValue()
+			return multi and selected or selected
+		end
+
+		function ChipFunctions:SetName(text)
+			NameLabel.Text = text
+		end
+
+		function ChipFunctions:SetDescription(text)
+			if DescriptionLabel then
+				DescriptionLabel.Text = text
+			end
+		end
+
+		ApplyVisible(Holder, chipSettings, ChipFunctions)
+		AttachAddons(ChipFunctions, Holder, {})
+
+		return RegisterOption(idx, ChipFunctions)
 	end
 end
 
