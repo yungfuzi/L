@@ -27,6 +27,8 @@ local elementCount = 0
 local Themes = {
 	Dark = {
 		BaseBackground = Color3.fromRGB(15, 15, 17),
+		ButtonTrans = 1,
+		PageTransparency = 0.5,
 		HeaderBackground = Color3.fromRGB(15, 15, 17),
 		SidebarBackground = Color3.fromRGB(15, 15, 17),
 		DividerColor = Color3.fromRGB(80, 80, 80),
@@ -51,8 +53,11 @@ local Themes = {
 		Accent = Color3.fromRGB(45, 110, 235),
 		Success = Color3.fromRGB(52, 199, 89),
 	},
+	
 	Light = {
 		BaseBackground = Color3.fromRGB(240, 240, 245),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
 		HeaderBackground = Color3.fromRGB(230, 230, 238),
 		SidebarBackground = Color3.fromRGB(230, 230, 238),
 		DividerColor = Color3.fromRGB(0, 0, 0),
@@ -77,9 +82,299 @@ local Themes = {
 		Accent = Color3.fromRGB(88, 82, 232),
 		Success = Color3.fromRGB(40, 170, 100),
 	},
+	
+	SoftLavender = {
+		BaseBackground = Color3.fromRGB(30, 28, 40),
+		ButtonTrans = 1,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(28, 26, 38),
+		SidebarBackground = Color3.fromRGB(28, 26, 38),
+		DividerColor = Color3.fromRGB(120, 110, 160),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(240, 235, 255),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(200, 190, 230),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(170, 160, 200),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(140, 120, 220),
+		TabActiveTransparency = 0.3,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(60, 55, 80),
+		Accent = Color3.fromRGB(160, 130, 230),
+		Success = Color3.fromRGB(120, 200, 160),
+	},
+
+	SoftRose = {
+		BaseBackground = Color3.fromRGB(42, 32, 36),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(40, 30, 34),
+		SidebarBackground = Color3.fromRGB(40, 30, 34),
+		DividerColor = Color3.fromRGB(180, 130, 140),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(255, 240, 242),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(220, 190, 195),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(190, 160, 165),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(220, 150, 170),
+		TabActiveTransparency = 0.25,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(80, 60, 65),
+		Accent = Color3.fromRGB(230, 160, 180),
+		Success = Color3.fromRGB(140, 210, 170),
+	},
+
+	SoftMint = {
+		BaseBackground = Color3.fromRGB(25, 40, 35),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(23, 38, 33),
+		SidebarBackground = Color3.fromRGB(23, 38, 33),
+		DividerColor = Color3.fromRGB(100, 160, 140),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(235, 255, 245),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(180, 220, 200),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(150, 190, 170),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(100, 200, 170),
+		TabActiveTransparency = 0.25,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(50, 80, 70),
+		Accent = Color3.fromRGB(120, 210, 180),
+		Success = Color3.fromRGB(100, 220, 160),
+	},
+
+	SoftPeach = {
+		BaseBackground = Color3.fromRGB(45, 35, 28),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(43, 33, 26),
+		SidebarBackground = Color3.fromRGB(43, 33, 26),
+		DividerColor = Color3.fromRGB(200, 160, 130),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(255, 245, 235),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(230, 210, 195),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(200, 180, 165),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(240, 180, 140),
+		TabActiveTransparency = 0.25,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(85, 70, 60),
+		Accent = Color3.fromRGB(250, 190, 150),
+		Success = Color3.fromRGB(160, 210, 140),
+	},
+
+	SoftSky = {
+		BaseBackground = Color3.fromRGB(25, 35, 50),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(23, 33, 48),
+		SidebarBackground = Color3.fromRGB(23, 33, 48),
+		DividerColor = Color3.fromRGB(100, 150, 200),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(235, 245, 255),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(180, 210, 240),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(150, 180, 210),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(100, 180, 240),
+		TabActiveTransparency = 0.2,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(50, 70, 90),
+		Accent = Color3.fromRGB(120, 190, 250),
+		Success = Color3.fromRGB(100, 210, 180),
+	},
+
+	SoftCoral = {
+		BaseBackground = Color3.fromRGB(45, 30, 32),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(43, 28, 30),
+		SidebarBackground = Color3.fromRGB(43, 28, 30),
+		DividerColor = Color3.fromRGB(200, 130, 140),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(255, 240, 238),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(230, 200, 195),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(200, 170, 165),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(240, 150, 150),
+		TabActiveTransparency = 0.25,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(85, 60, 65),
+		Accent = Color3.fromRGB(250, 160, 160),
+		Success = Color3.fromRGB(150, 210, 150),
+	},
+
+	SoftSage = {
+		BaseBackground = Color3.fromRGB(30, 38, 32),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(28, 36, 30),
+		SidebarBackground = Color3.fromRGB(28, 36, 30),
+		DividerColor = Color3.fromRGB(130, 170, 140),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(240, 255, 240),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(190, 220, 190),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(160, 190, 160),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(130, 190, 150),
+		TabActiveTransparency = 0.25,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(55, 75, 60),
+		Accent = Color3.fromRGB(150, 210, 170),
+		Success = Color3.fromRGB(120, 210, 140),
+	},
+
+	SoftBlush = {
+		BaseBackground = Color3.fromRGB(48, 35, 40),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(46, 33, 38),
+		SidebarBackground = Color3.fromRGB(46, 33, 38),
+		DividerColor = Color3.fromRGB(200, 160, 170),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(255, 245, 248),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(230, 200, 210),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(200, 170, 180),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(230, 170, 190),
+		TabActiveTransparency = 0.2,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(80, 65, 70),
+		Accent = Color3.fromRGB(240, 180, 200),
+		Success = Color3.fromRGB(160, 210, 170),
+	},
+
+	SoftOcean = {
+		BaseBackground = Color3.fromRGB(20, 30, 45),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(18, 28, 43),
+		SidebarBackground = Color3.fromRGB(18, 28, 43),
+		DividerColor = Color3.fromRGB(80, 140, 190),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(230, 245, 255),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(170, 210, 240),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(140, 180, 210),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(70, 160, 220),
+		TabActiveTransparency = 0.2,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(40, 60, 80),
+		Accent = Color3.fromRGB(90, 180, 240),
+		Success = Color3.fromRGB(80, 210, 190),
+	},
+
+	SoftLilac = {
+		BaseBackground = Color3.fromRGB(35, 30, 45),
+		ButtonTrans = 0.95,
+		PageTransparency = 0.5,
+		HeaderBackground = Color3.fromRGB(33, 28, 43),
+		SidebarBackground = Color3.fromRGB(33, 28, 43),
+		DividerColor = Color3.fromRGB(150, 130, 190),
+		DividerTransparency = 0.85,
+
+		TextPrimary = Color3.fromRGB(245, 240, 255),
+		TextPrimaryTransparency = 0,
+		TextMuted = Color3.fromRGB(200, 190, 230),
+		TextMutedTransparency = 0.4,
+		TextDim = Color3.fromRGB(170, 160, 200),
+		TextDimTransparency = 0.55,
+
+		ElementBackground = Color3.fromRGB(255, 255, 255),
+		ElementBackgroundTransparency = 0.92,
+
+		TabActiveBackground = Color3.fromRGB(170, 140, 230),
+		TabActiveTransparency = 0.25,
+		TabHoverBackground = Color3.fromRGB(255, 255, 255),
+		TabHoverTransparency = 0.92,
+
+		ToggleOff = Color3.fromRGB(65, 55, 85),
+		Accent = Color3.fromRGB(190, 160, 240),
+		Success = Color3.fromRGB(140, 210, 180),
+	},
 }
 
-Valk.CurrentTheme = Themes.Dark
+Valk.CurrentTheme = Themes.SoftLavender
 local ThemeRegistry = {}
 
 
@@ -313,9 +608,9 @@ local function BuildTooltip(AnchorFrame, cfg)
 	return TooltipFunctions
 end
 
--- Attaches chained addon methods (:Keybind, :Tooltip) onto an element's functions table.
--- opts.Get/opts.Set describe a toggle-like state for default Keybind behavior; opts.Fire
--- describes a button-like default action. Both are optional.
+
+
+
 local function AttachAddons(Functions, MainFrame, opts)
 	opts = opts or {}
 	local getState = opts.Get
@@ -328,6 +623,19 @@ local function AttachAddons(Functions, MainFrame, opts)
 		local mode = keybindSettings.Mode or "Toggle"
 		local callback = keybindSettings.Callback
 		local preventToggle = keybindSettings.PreventToggle
+
+		local keyLabel = create("TextLabel", {
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -45, 0.5, 0),
+			Size = UDim2.new(0, 60, 0, 20),
+			FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+			Text = key and key.Name or "None",
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Parent = MainFrame,
+		})
+		RegisterThemeElement(keyLabel, "TextColor3", "TextMuted", "TextMutedTransparency")
 
 		local function trigger(active)
 			if callback then
@@ -366,6 +674,7 @@ local function AttachAddons(Functions, MainFrame, opts)
 
 		function KeybindFunctions:SetKey(newKey)
 			key = newKey
+			keyLabel.Text = key and key.Name or "None"
 		end
 
 		function KeybindFunctions:Destroy()
@@ -373,6 +682,7 @@ local function AttachAddons(Functions, MainFrame, opts)
 			if endedConn then
 				endedConn:Disconnect()
 			end
+			keyLabel:Destroy()
 		end
 
 		return RegisterOption(idx, KeybindFunctions)
@@ -418,7 +728,7 @@ local function MakeDraggable(frame, dragHandle)
 end
 
 local function BuildElementFunctions(Target, Body)
-	-- Label(idx, labelSettings) or Label(labelSettings)
+
 	function Target:Label(a, b)
 		local idx, labelSettings = ResolveArgs(a, b)
 
@@ -450,7 +760,7 @@ local function BuildElementFunctions(Target, Body)
 		return RegisterOption(idx, LabelFunctions)
 	end
 
-	-- Card(idx, cardSettings) or Card(cardSettings)
+
 	function Target:Card(a, b)
 		local idx, cardSettings = ResolveArgs(a, b)
 		cardSettings.Corner = cardSettings.Corner or {}
@@ -708,7 +1018,7 @@ local function BuildElementFunctions(Target, Body)
 		return RegisterOption(idx, CardFunctions)
 	end
 
-	-- Divider(idx, dividerSettings) or Divider(dividerSettings) or Divider(idx) or Divider()
+
 	function Target:Divider(a, b)
 		local idx, dividerSettings = ResolveArgs(a, b)
 
@@ -727,7 +1037,7 @@ local function BuildElementFunctions(Target, Body)
 		return RegisterOption(idx, DividerFunctions)
 	end
 
-	-- Paragraph(idx, paragraphSettings) or Paragraph(paragraphSettings)
+
 	function Target:Paragraph(a, b)
 		local idx, paragraphSettings = ResolveArgs(a, b)
 
@@ -794,7 +1104,7 @@ local function BuildElementFunctions(Target, Body)
 		return RegisterOption(idx, ParagraphFunctions)
 	end
 
-	-- Button(idx, buttonSettings) or Button(buttonSettings)
+
 	function Target:Button(a, b)
 		local idx, buttonSettings = ResolveArgs(a, b)
 		elementCount += 1
@@ -904,7 +1214,7 @@ local function BuildElementFunctions(Target, Body)
 		return RegisterOption(idx, ButtonFunctions)
 	end
 
-	-- Toggle(idx, toggleSettings) or Toggle(toggleSettings)
+
 	function Target:Toggle(a, b)
 		local idx, toggleSettings = ResolveArgs(a, b)
 		elementCount += 1
@@ -1092,7 +1402,7 @@ local function BuildElementFunctions(Target, Body)
 		local multi = dropdownSettings.Multi or false
 		local maxVisible = dropdownSettings.MaxVisible or 6
 		local placeholder = dropdownSettings.Placeholder or "Select..."
-		local style = dropdownSettings.Style or 1 -- 1: Thả xuống, 2: Panel trượt từ bên phải
+		local style = dropdownSettings.Style or 1 
 
 		if multi then
 			selected = type(selected) == "table" and selected or {}
@@ -1194,7 +1504,7 @@ local function BuildElementFunctions(Target, Body)
 		})
 		RegisterThemeElement(ArrowIcon, "ImageColor3", "TextMuted", "ImageTransparency")
 
-		-- Tìm kiếm Frame chính tên "Main"
+
 		local mainParent = Holder
 		while mainParent and mainParent.Name ~= "Main" and mainParent.Parent do
 			mainParent = mainParent.Parent
@@ -1729,7 +2039,242 @@ local function BuildElementFunctions(Target, Body)
 		return RegisterOption(idx, DropdownFunctions)
 	end
 
-	-- Slider(idx, sliderSettings) or Slider(sliderSettings)
+
+	function Target:TextBox(a, b)
+		local idx, textboxSettings = ResolveArgs(a, b)
+		elementCount += 1
+
+		local placeholder = textboxSettings.Placeholder or "Type here..."
+		local defaultText = textboxSettings.Default or ""
+		local hasDescription = textboxSettings.Description and textboxSettings.Description ~= ""
+		local tbHeight = hasDescription and 60 or 44
+
+		local Holder = create("Frame", {
+			Size = UDim2.new(1, 0, 0, tbHeight),
+			BackgroundTransparency = 1,
+			Parent = Body,
+		})
+		create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = Holder })
+
+		local NameLabel = create("TextLabel", {
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 0, 0, hasDescription and 8 or 0),
+			Size = UDim2.new(1, -155, 0, hasDescription and 18 or tbHeight),
+			FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal),
+			Text = textboxSettings.Name or "TextBox",
+			TextSize = 15,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Center,
+			Parent = Holder,
+		})
+		RegisterThemeElement(NameLabel, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+
+		local DescriptionLabel
+		if hasDescription then
+			DescriptionLabel = create("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 0, 0, 28),
+				Size = UDim2.new(1, -155, 0, 24),
+				FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+				Text = textboxSettings.Description,
+				TextSize = 12,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				Parent = Holder,
+			})
+			RegisterThemeElement(DescriptionLabel, "TextColor3", "TextDim", "TextDimTransparency")
+		end
+
+		local InputBox = create("TextBox", {
+			Position = UDim2.new(1, -140, 0.5, -15),
+			Size = UDim2.new(0, 140, 0, 30),
+			FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+			PlaceholderText = placeholder,
+			Text = defaultText,
+			TextSize = 13,
+			ClipsDescendants = true,
+			ClearTextOnFocus = textboxSettings.ClearTextOnFocus or false,
+			Parent = Holder,
+		})
+		create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = InputBox })
+		RegisterThemeElement(InputBox, "BackgroundColor3", "ElementBackground", "ElementBackgroundTransparency")
+		RegisterThemeElement(InputBox, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+		RegisterThemeElement(InputBox, "PlaceholderColor3", "TextMuted")
+
+		create("UIStroke", {
+			Color = Color3.fromRGB(255, 255, 255),
+			Transparency = 0.8,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Parent = InputBox,
+		})
+
+		create("UIPadding", {
+			PaddingLeft = UDim.new(0, 8),
+			PaddingRight = UDim.new(0, 8),
+			Parent = InputBox,
+		})
+
+		InputBox.FocusLost:Connect(function(enterPressed)
+			if textboxSettings.Callback then
+				textboxSettings.Callback(InputBox.Text, enterPressed)
+			end
+		end)
+
+		local TextBoxFunctions = { Instance = Holder, Input = InputBox }
+
+		function TextBoxFunctions:Set(text)
+			InputBox.Text = text
+			if textboxSettings.Callback then
+				textboxSettings.Callback(text, false)
+			end
+		end
+
+		function TextBoxFunctions:Get()
+			return InputBox.Text
+		end
+
+		function TextBoxFunctions:SetName(text)
+			NameLabel.Text = text
+		end
+
+		function TextBoxFunctions:SetDescription(text)
+			if DescriptionLabel then
+				DescriptionLabel.Text = text
+			end
+		end
+
+		ApplyVisible(Holder, textboxSettings, TextBoxFunctions)
+		AttachAddons(TextBoxFunctions, Holder, {
+			Get = function()
+				return TextBoxFunctions:Get()
+			end,
+			Set = function(v)
+				TextBoxFunctions:Set(v)
+			end,
+		})
+
+		return RegisterOption(idx, TextBoxFunctions)
+	end
+
+
+	function Target:TextBox(a, b)
+		local idx, textboxSettings = ResolveArgs(a, b)
+		elementCount += 1
+
+		local placeholder = textboxSettings.Placeholder or "Type here..."
+		local defaultText = textboxSettings.Default or ""
+		local hasDescription = textboxSettings.Description and textboxSettings.Description ~= ""
+		local tbHeight = hasDescription and 60 or 44
+
+		local Holder = create("Frame", {
+			Size = UDim2.new(1, 0, 0, tbHeight),
+			BackgroundTransparency = 1,
+			Parent = Body,
+		})
+		create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = Holder })
+
+		local NameLabel = create("TextLabel", {
+			BackgroundTransparency = 1,
+			Position = UDim2.new(0, 0, 0, hasDescription and 8 or 0),
+			Size = UDim2.new(1, -155, 0, hasDescription and 18 or tbHeight),
+			FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Bold, Enum.FontStyle.Normal),
+			Text = textboxSettings.Name or "TextBox",
+			TextSize = 15,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Center,
+			Parent = Holder,
+		})
+		RegisterThemeElement(NameLabel, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+
+		local DescriptionLabel
+		if hasDescription then
+			DescriptionLabel = create("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 0, 0, 28),
+				Size = UDim2.new(1, -155, 0, 24),
+				FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+				Text = textboxSettings.Description,
+				TextSize = 12,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				Parent = Holder,
+			})
+			RegisterThemeElement(DescriptionLabel, "TextColor3", "TextDim", "TextDimTransparency")
+		end
+
+		local InputBox = create("TextBox", {
+			Position = UDim2.new(1, -140, 0.5, -15),
+			Size = UDim2.new(0, 140, 0, 30),
+			FontFace = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal),
+			PlaceholderText = placeholder,
+			Text = defaultText,
+			TextSize = 13,
+			ClipsDescendants = true,
+			ClearTextOnFocus = textboxSettings.ClearTextOnFocus or false,
+			Parent = Holder,
+		})
+		create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = InputBox })
+		RegisterThemeElement(InputBox, "BackgroundColor3", "ElementBackground", "ElementBackgroundTransparency")
+		RegisterThemeElement(InputBox, "TextColor3", "TextPrimary", "TextPrimaryTransparency")
+		RegisterThemeElement(InputBox, "PlaceholderColor3", "TextMuted")
+
+		create("UIStroke", {
+			Color = Color3.fromRGB(255, 255, 255),
+			Transparency = 0.8,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Parent = InputBox,
+		})
+
+		create("UIPadding", {
+			PaddingLeft = UDim.new(0, 8),
+			PaddingRight = UDim.new(0, 8),
+			Parent = InputBox,
+		})
+
+		InputBox.FocusLost:Connect(function(enterPressed)
+			if textboxSettings.Callback then
+				textboxSettings.Callback(InputBox.Text, enterPressed)
+			end
+		end)
+
+		local TextBoxFunctions = { Instance = Holder, Input = InputBox }
+
+		function TextBoxFunctions:Set(text)
+			InputBox.Text = text
+			if textboxSettings.Callback then
+				textboxSettings.Callback(text, false)
+			end
+		end
+
+		function TextBoxFunctions:Get()
+			return InputBox.Text
+		end
+
+		function TextBoxFunctions:SetName(text)
+			NameLabel.Text = text
+		end
+
+		function TextBoxFunctions:SetDescription(text)
+			if DescriptionLabel then
+				DescriptionLabel.Text = text
+			end
+		end
+
+		ApplyVisible(Holder, textboxSettings, TextBoxFunctions)
+		AttachAddons(TextBoxFunctions, Holder, {
+			Get = function()
+				return TextBoxFunctions:Get()
+			end,
+			Set = function(v)
+				TextBoxFunctions:Set(v)
+			end,
+		})
+
+		return RegisterOption(idx, TextBoxFunctions)
+	end
+
 	function Target:Slider(a, b)
 		local idx, sliderSettings = ResolveArgs(a, b)
 		elementCount += 1
@@ -1833,8 +2378,8 @@ local function BuildElementFunctions(Target, Body)
 		return RegisterOption(idx, SliderFunctions)
 	end
 
-	-- ChipSelection(idx, chipSettings) or ChipSelection(chipSettings)
-	-- ChipSelection(idx, chipSettings) or ChipSelection(chipSettings)
+
+
 	function Target:ChipSelection(a, b)
 		local idx, chipSettings = ResolveArgs(a, b)
 		elementCount += 1
@@ -2274,6 +2819,7 @@ function Valk:Window(Settings)
 		Size = UDim2.new(1, 0, 0, 78),
 		Parent = Main,
 	})
+	MakeDraggable(Main, Header)
 
 	local IconBadge = create("Frame", {
 		Name = "IconBadge",
@@ -2390,11 +2936,11 @@ function Valk:Window(Settings)
 	end
 
 	local TextService = game:GetService("TextService")
- 
+
 	local function getPillWidth(name)
 		local nameText = name
 		local handleText = "@" .. name
- 
+
 		local nameSize = TextService:GetTextSize(
 			nameText, 14, Enum.Font.Roboto,
 			Vector2.new(math.huge, 16)
@@ -2403,19 +2949,19 @@ function Valk:Window(Settings)
 			handleText, 11, Enum.Font.Roboto,
 			Vector2.new(math.huge, 14)
 		)
- 
+
 		local textWidth = math.max(nameSize.X, handleSize.X)
 		return math.clamp(32 + 4 + 8 + textWidth + 12, 90, 260)
 	end
- 
+
 	local pillWidth = getPillWidth(Settings.Username or LocalPlayer.Name)
- 
+
 	local settingsCog = nil
- 
+
 	local cachedSettingsFunctions = nil
- 
+
 	local PILL_COLLAPSED = 40
- 
+
 	local UserPill = create("Frame", {
 		Name = "UserPill",
 		BorderSizePixel = 0,
@@ -2428,7 +2974,7 @@ function Valk:Window(Settings)
 	create("UICorner", { CornerRadius = UDim.new(0, 20), Parent = UserPill })
 	create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.7, Parent = UserPill })
 	RegisterThemeElement(UserPill, "BackgroundColor3", "ElementBackground", "ElementBackgroundTransparency")
- 
+
 	local Avatar = create("ImageLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 4, 0.5, -16),
@@ -2438,7 +2984,7 @@ function Valk:Window(Settings)
 		Parent = UserPill,
 	})
 	create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Avatar })
- 
+
 	local UsernameLabel = create("TextLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 44, 0, 4),
@@ -2451,7 +2997,7 @@ function Valk:Window(Settings)
 		Parent = UserPill,
 	})
 	RegisterThemeElement(UsernameLabel, "TextColor3", "TextPrimary")
- 
+
 	local HandleLabel = create("TextLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.new(0, 44, 0, 20),
@@ -2464,12 +3010,12 @@ function Valk:Window(Settings)
 		Parent = UserPill,
 	})
 	RegisterThemeElement(HandleLabel, "TextColor3", "TextDim")
- 
-	-- Hover: pill slides open like the type-2 dropdown search pill, revealing
-	-- username/handle. Since AnchorPoint.X = 1 the frame grows to the left, so
-	-- only Size needs to change; Position (and any Settings-cog offset) stays put.
+
+
+
+
 	local pillOpen = false
- 
+
 	local function openPill()
 		if pillOpen then return end
 		pillOpen = true
@@ -2479,7 +3025,7 @@ function Valk:Window(Settings)
 		Tween(UsernameLabel, TweenInfo.new(0.2), { TextTransparency = 0 }):Play()
 		Tween(HandleLabel, TweenInfo.new(0.2), { TextTransparency = 0.35 }):Play()
 	end
- 
+
 	local function closePill()
 		if not pillOpen then return end
 		pillOpen = false
@@ -2489,10 +3035,10 @@ function Valk:Window(Settings)
 		Tween(UsernameLabel, TweenInfo.new(0.12), { TextTransparency = 1 }):Play()
 		Tween(HandleLabel, TweenInfo.new(0.12), { TextTransparency = 1 }):Play()
 	end
- 
+
 	UserPill.MouseEnter:Connect(openPill)
 	UserPill.MouseLeave:Connect(closePill)
- 
+
 	local Divider = create("Frame", {
 		Name = "Divider",
 		BorderSizePixel = 0,
@@ -2587,7 +3133,7 @@ function Valk:Window(Settings)
 			Color3.fromRGB(255, 255, 255),
 			Color3.fromRGB(53, 53, 53)
 		)
-		
+
 		local StrokeGradient = create("UIGradient", { Enabled = true, Parent = TabStroke })
 
 		StrokeGradient.Color = ColorSequence.new(
@@ -3011,7 +3557,7 @@ function Valk:Window(Settings)
 		create("UIStroke", { Color = Color3.fromRGB(255, 255, 255), Transparency = 0.9, Parent = Panel })
 		RegisterThemeElement(Panel, "BackgroundColor3", "BaseBackground")
 
-		-- Pop-in scale for the panel itself, independent of the backdrop fade.
+
 		local PanelScale = create("UIScale", { Scale = 0.85, Parent = Panel })
 
 		local PanelHeader = create("Frame", {
