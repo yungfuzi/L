@@ -1,7 +1,4 @@
 local Library = {
-    -- ============================================================
-    -- 1. SERVICES & ENVIRONMENT
-    -- ============================================================
 }
 
 local cloneref = cloneref or clonereference or function(instance) return instance end
@@ -24,52 +21,34 @@ local gethui = gethui or function() return CoreGui end
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local Mouse = cloneref(LocalPlayer:GetMouse())
 
--- ============================================================
--- 2. DESIGN TOKENS & THEME
--- ============================================================
-
 local Theme = {
-    -- Dark background layers (from deepest to topmost)
     Base = Color3.fromRGB(10, 10, 14),
     Window = Color3.fromRGB(18, 18, 24),
     Surface = Color3.fromRGB(24, 24, 32),
     Elevated = Color3.fromRGB(32, 32, 42),
-    Glass = Color3.fromRGB(255, 255, 255, 0.06), -- used as overlay
-
-    -- Text
+    Glass = Color3.fromRGB(255, 255, 255, 0.06),
     TextPrimary = Color3.fromRGB(240, 240, 245),
     TextSecondary = Color3.fromRGB(180, 180, 195),
     TextMuted = Color3.fromRGB(130, 130, 150),
     TextDisabled = Color3.fromRGB(80, 80, 95),
-
-    -- Borders & Dividers
     Border = Color3.fromRGB(55, 55, 70),
     Divider = Color3.fromRGB(45, 45, 55),
     Shadow = Color3.fromRGB(0, 0, 0, 0.4),
-
-    -- Accent Gradient (Neon Blue → Purple → Pink)
     AccentStart = Color3.fromRGB(0, 180, 255),
     AccentMiddle = Color3.fromRGB(150, 80, 255),
     AccentEnd = Color3.fromRGB(255, 80, 200),
-
-    -- Status
     Success = Color3.fromRGB(0, 230, 120),
     Warning = Color3.fromRGB(255, 200, 0),
     Error = Color3.fromRGB(255, 70, 70),
     Info = Color3.fromRGB(0, 180, 255),
-
-    -- Corner radii
     RadiusWindow = 14,
     RadiusPanel = 10,
     RadiusElement = 8,
     RadiusSmall = 6,
     RadiusPill = 20,
-
-    -- Font
     Font = Font.fromEnum(Enum.Font.Gotham),
 }
 
--- Helper: generate a color sequence for gradients
 local function accentGradientSequence()
     return ColorSequence.new({
         ColorSequenceKeypoint.new(0, Theme.AccentStart),
@@ -77,10 +56,6 @@ local function accentGradientSequence()
         ColorSequenceKeypoint.new(1, Theme.AccentEnd),
     })
 end
-
--- ============================================================
--- 3. CUSTOM IMAGE MANAGER
--- ============================================================
 
 local CustomImageManager = {}
 local ImageAssets = {}
@@ -101,7 +76,6 @@ function CustomImageManager:GetAsset(name)
     local asset = ImageAssets[name]
     if not asset then return nil end
     if asset.Id then return asset.Id end
-
     local id = "rbxassetid://" .. asset.RobloxId
     if getcustomasset then
         local success, custom = pcall(getcustomasset, asset.Path)
@@ -114,22 +88,17 @@ end
 function CustomImageManager:DownloadAsset(name, forceRedownload)
     local asset = ImageAssets[name]
     if not getcustomasset or not writefile or not isfile then return false, "missing functions" end
-
-    -- Create folder if needed
     local segments = asset.Path:split("/")
     table.remove(segments, #segments)
     local folder = table.concat(segments, "/")
     if not isfolder(folder) then makefolder(folder) end
-
     if not forceRedownload and isfile(asset.Path) then return true end
-
     local success, err = pcall(function()
         writefile(asset.Path, game:HttpGet(asset.URL))
     end)
     return success, err
 end
 
--- Preload assets
 local BaseURL = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
 local defaultAssets = {
     TransparencyTexture = { RobloxId = 139785960036434, URL = BaseURL .. "assets/TransparencyTexture.png" },
@@ -140,10 +109,6 @@ local defaultAssets = {
 for name, data in pairs(defaultAssets) do
     CustomImageManager:AddAsset(name, data.RobloxId, data.URL)
 end
-
--- ============================================================
--- 4. ICON SYSTEM (Lucide)
--- ============================================================
 
 local LucideModule
 local LucideLoaded = pcall(function()
@@ -162,8 +127,6 @@ function Library:GetCustomIcon(icon)
         icon = "rbxassetid://" .. tostring(icon)
     end
     if type(icon) ~= "string" then return nil end
-
-    -- Check if it's a custom asset (content://, rbxasset://, or rbxassetid://)
     if icon:match("^content://") or icon:match("^rbxasset://") or icon:match("^rbxassetid://") then
         return {
             Url = icon,
@@ -172,8 +135,6 @@ function Library:GetCustomIcon(icon)
             IsCustom = true,
         }
     end
-
-    -- Lucide icon
     local lucide = Library:GetIcon(icon)
     if lucide then
         return {
@@ -183,8 +144,6 @@ function Library:GetCustomIcon(icon)
             IsCustom = false,
         }
     end
-
-    -- Try to load as URL
     if icon:match("^https?://") then
         return {
             Url = icon,
@@ -193,13 +152,8 @@ function Library:GetCustomIcon(icon)
             IsCustom = true,
         }
     end
-
     return nil
 end
-
--- ============================================================
--- 5. HELPER FUNCTIONS
--- ============================================================
 
 local function WaitForEvent(event, timeout, condition)
     local bind = Instance.new("BindableEvent")
@@ -285,10 +239,6 @@ local function GetTeams()
     return list
 end
 
--- ============================================================
--- 6. LIBRARY STATE
--- ============================================================
-
 Library._isFocused = true
 Library._toggled = false
 Library._unloaded = false
@@ -330,7 +280,7 @@ Library._tabTransitionInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.Eas
 Library._tabSwipeOffset = 20
 Library._tabSwipeFrom = "right"
 
-Library._registry = {} -- for dynamic color updates
+Library._registry = {}
 Library._scales = {}
 Library._scalesOffset = {}
 
@@ -347,7 +297,6 @@ Library._minSize = Vector2.new(480, 360)
 Library._originalMinSize = Vector2.new(480, 360)
 Library._dpiScale = 1
 
--- Determine mobile
 Library._isMobile = false
 if RunService:IsStudio() then
     Library._isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
@@ -359,10 +308,6 @@ if Library._isMobile then
     Library._originalMinSize = Vector2.new(480, 240)
 end
 Library._minSize = Library._originalMinSize
-
--- ============================================================
--- 7. UI CONSTRUCTION HELPERS
--- ============================================================
 
 local function New(className, props)
     local inst = Instance.new(className)
@@ -388,10 +333,6 @@ local function ParentUI(inst, skipProtect)
     SafeParent(inst, gethui())
 end
 
--- ============================================================
--- 8. MAIN SCREENGUI
--- ============================================================
-
 local ScreenGui = New("ScreenGui", {
     Name = "Library",
     DisplayOrder = 998,
@@ -408,7 +349,6 @@ local ModalElement = New("TextButton", {
     Parent = ScreenGui,
 })
 
--- Cursor
 local Cursor, CursorImage
 do
     Cursor = New("Frame", {
@@ -454,7 +394,6 @@ do
     })
 end
 
--- Notification area
 local NotificationArea = New("Frame", {
     AnchorPoint = Vector2.new(1, 0),
     BackgroundTransparency = 1,
@@ -463,10 +402,6 @@ local NotificationArea = New("Frame", {
     Parent = ScreenGui,
 })
 table.insert(Library._scales, New("UIScale", { Parent = NotificationArea }))
-
--- ============================================================
--- 9. THEME REGISTRY & UPDATES
--- ============================================================
 
 function Library:AddToRegistry(instance, props)
     self._registry[instance] = props
@@ -493,10 +428,6 @@ function Library:UpdateColors()
         end
     end
 end
-
--- ============================================================
--- 10. DRAGGABLE & RESIZABLE
--- ============================================================
 
 local function GetOverlappingDraggable(ui, pos)
     local pos1 = pos or ui.AbsolutePosition
@@ -542,6 +473,10 @@ local function GetNonOverlappingPosition(ui, startPos)
         end
     end
     return UDim2.fromOffset(cx, cy)
+end
+
+local function PositionDraggable(ui, startPos)
+    ui.Position = GetNonOverlappingPosition(ui, startPos)
 end
 
 function Library:MakeDraggable(ui, dragFrame, ignoreToggled, isMain)
@@ -635,10 +570,6 @@ function Library:MakeResizable(ui, dragFrame, callback)
     end)
 end
 
--- ============================================================
--- 11. TOOLTIP
--- ============================================================
-
 local TooltipLabel = New("TextLabel", {
     AutomaticSize = Enum.AutomaticSize.Y,
     BackgroundColor3 = Theme.Surface,
@@ -708,10 +639,6 @@ function Library:AddTooltip(text, disabledText, hoverInstance)
     end
     return tooltip
 end
-
--- ============================================================
--- 12. NOTIFICATIONS
--- ============================================================
 
 function Library:SetNotifySide(side)
     self._notifySide = side
@@ -862,7 +789,6 @@ function Library:Notify(...)
 
     data:Resize()
 
-    -- Timer bar
     local timerHolder = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 5),
@@ -918,10 +844,6 @@ function Library:Notify(...)
 
     return data
 end
-
--- ============================================================
--- 13. CONTEXT MENU (Dropdown/ColorPicker/Hotkey)
--- ============================================================
 
 local currentContextMenu = nil
 
@@ -1031,7 +953,6 @@ function Library:CreateContextMenu(anchor, sizeProvider, offsetProvider, isScrol
             menu.Visible = true
         end
 
-        -- Track anchor movement to reposition
         local conn = anchor:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
             local p = context.OffsetProvider()
             menu.Position = UDim2.fromOffset(
@@ -1092,7 +1013,6 @@ function Library:CreateContextMenu(anchor, sizeProvider, offsetProvider, isScrol
     return context
 end
 
--- Close context menu on outside click
 UserInputService.InputBegan:Connect(function(input)
     if Library._unloaded then return end
     if IsClickInput(input, true) then
@@ -1105,12 +1025,6 @@ UserInputService.InputBegan:Connect(function(input)
         end
     end
 end)
-
--- ============================================================
--- 14. BASE ELEMENTS (PANEL, TAB, WINDOW)
--- ============================================================
-
--- We'll define Panel as a container with header and content, collapsible, with glass style.
 
 local PanelBase = {}
 function PanelBase:AddDivider(...) end
@@ -1126,12 +1040,6 @@ function PanelBase:AddImage(...) end
 function PanelBase:AddVideo(...) end
 function PanelBase:AddViewport(...) end
 function PanelBase:AddUIPassthrough(...) end
-
--- These will be filled later.
-
--- ============================================================
--- 15. TEXT BOUNDS
--- ============================================================
 
 function Library:GetTextBounds(text, font, size, width)
     local params = Instance.new("GetTextBoundsParams")
@@ -1150,10 +1058,6 @@ function Library:MouseIsOverFrame(frame, mousePos)
            mousePos.Y >= pos.Y and mousePos.Y <= pos.Y + size.Y
 end
 
--- ============================================================
--- 16. PANEL SYSTEM
--- ============================================================
-
 local function CreatePanel(parent, info)
     info = info or {}
     local title = info.Title or ""
@@ -1161,7 +1065,7 @@ local function CreatePanel(parent, info)
     local icon = info.Icon
     local collapsible = info.Collapsible ~= false
     local collapsed = info.Collapsed or false
-    local side = info.Side or 1 -- 1=left, 2=right
+    local side = info.Side or 1
 
     local holder = New("Frame", {
         AutomaticSize = Enum.AutomaticSize.Y,
@@ -1180,7 +1084,6 @@ local function CreatePanel(parent, info)
     New("UICorner", { CornerRadius = UDim.new(0, Theme.RadiusPanel), Parent = panel })
     New("UIStroke", { Color = Theme.Border, Parent = panel })
 
-    -- Header
     local header = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 36),
@@ -1234,10 +1137,8 @@ local function CreatePanel(parent, info)
         })
     end
 
-    -- Spacer
     New("Frame", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Parent = header })
 
-    -- Collapse arrow
     local arrow = nil
     if collapsible then
         local arrowIcon = Library:GetIcon("chevron-up")
@@ -1253,7 +1154,6 @@ local function CreatePanel(parent, info)
         })
     end
 
-    -- Content
     local content = New("Frame", {
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(0, 36),
@@ -1282,7 +1182,7 @@ local function CreatePanel(parent, info)
         Collapsible = collapsible,
         Elements = {},
         DependencyBoxes = {},
-        Tab = nil, -- will be set by parent
+        Tab = nil,
         Type = "Panel",
     }
 
@@ -1318,21 +1218,14 @@ local function CreatePanel(parent, info)
         end)
     end
 
-    -- Add methods for elements
     local function addElement(element)
         table.insert(panelObj.Elements, element)
         panelObj:Resize()
         return element
     end
 
-    -- We'll define element creators later and attach to panelObj.
-
     return panelObj
 end
-
--- ============================================================
--- 17. TAB SYSTEM
--- ============================================================
 
 local function CreateTab(window, name, icon, description)
     local tabButton = New("TextButton", {
@@ -1379,7 +1272,6 @@ local function CreateTab(window, name, icon, description)
         end
     end
 
-    -- Tab canvas
     local canvas = New("CanvasGroup", {
         BackgroundTransparency = 1,
         ClipsDescendants = true,
@@ -1395,7 +1287,6 @@ local function CreateTab(window, name, icon, description)
         Parent = canvas,
     })
 
-    -- Left and right side scrolling frames
     local leftSide = New("ScrollingFrame", {
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
@@ -1442,19 +1333,16 @@ local function CreateTab(window, name, icon, description)
         window._activeTab = tabObj
         tabObj.Active = true
 
-        -- Update button style
         TweenService:Create(tabButton, Library._tweenInfo, { BackgroundTransparency = 0 }):Play()
         TweenService:Create(label, Library._tweenInfo, { TextColor3 = Theme.TextPrimary }):Play()
         if iconImg then
             TweenService:Create(iconImg, Library._tweenInfo, { ImageColor3 = Theme.AccentStart }):Play()
         end
 
-        -- Animate canvas
         Library:PlayTabAnimation(canvas, true)
         if description then
             window:ShowTabInfo(name, description)
         end
-        -- Resize panels
         for _, panel in ipairs(tabObj.Panels) do
             panel:Resize()
         end
@@ -1504,13 +1392,11 @@ local function CreateTab(window, name, icon, description)
             panel.Holder:Destroy()
         end
         tabObj.Panels = {}
-        -- remove from window tabs
         for i, t in ipairs(window._tabs) do
             if t == tabObj then table.remove(window._tabs, i) break end
         end
     end
 
-    -- Hover effects
     tabButton.MouseEnter:Connect(function()
         if tabObj.Active then return end
         TweenService:Create(label, Library._tweenInfo, { TextColor3 = Theme.TextPrimary }):Play()
@@ -1529,10 +1415,6 @@ local function CreateTab(window, name, icon, description)
 
     return tabObj
 end
-
--- ============================================================
--- 18. WINDOW SYSTEM
--- ============================================================
 
 function Library:CreateWindow(info)
     info = info or {}
@@ -1556,14 +1438,13 @@ function Library:CreateWindow(info)
     self._toggleKeybind = toggleKeybind
 
     local viewport = workspace.CurrentCamera.ViewportSize
-    local maxX = viewport.X - 64
-    local maxY = viewport.Y - 64
+    local maxX = math.max(viewport.X - 64, minWidth)
+    local maxY = math.max(viewport.Y - 64, minHeight)
     local w = math.clamp(size.X.Offset, minWidth, maxX)
     local h = math.clamp(size.Y.Offset, minHeight, maxY)
     size = UDim2.fromOffset(w, h)
     self._minSize = Vector2.new(minWidth, minHeight)
 
-    -- Main frame
     local main = New("TextButton", {
         BackgroundColor3 = Theme.Window,
         Name = "Main",
@@ -1577,7 +1458,6 @@ function Library:CreateWindow(info)
     New("UIStroke", { Color = Theme.Border, Parent = main })
     table.insert(self._scales, New("UIScale", { Parent = main }))
 
-    -- Glass overlay
     local glass = New("Frame", {
         BackgroundColor3 = Theme.Glass,
         Position = UDim2.fromScale(0, 0),
@@ -1587,7 +1467,6 @@ function Library:CreateWindow(info)
     })
     New("UICorner", { CornerRadius = UDim.new(0, Theme.RadiusWindow), Parent = glass })
 
-    -- Top bar (draggable)
     local topBar = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 44),
@@ -1595,7 +1474,6 @@ function Library:CreateWindow(info)
     })
     self:MakeDraggable(main, topBar, false, true)
 
-    -- Title
     local titleHolder = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.new(0, sidebarWidth, 1, 0),
@@ -1635,7 +1513,6 @@ function Library:CreateWindow(info)
         Parent = titleHolder,
     })
 
-    -- Right side (search, tab info)
     local rightWrapper = New("Frame", {
         AnchorPoint = Vector2.new(1, 0.5),
         BackgroundTransparency = 1,
@@ -1650,7 +1527,6 @@ function Library:CreateWindow(info)
         Parent = rightWrapper,
     })
 
-    -- Tab info
     local tabInfo = New("Frame", {
         BackgroundTransparency = 1,
         Size = UDim2.fromScale(1, 1),
@@ -1684,7 +1560,6 @@ function Library:CreateWindow(info)
         Parent = tabInfo,
     })
 
-    -- Search box
     local searchBox = New("TextBox", {
         BackgroundColor3 = Theme.Surface,
         ClearTextOnFocus = false,
@@ -1700,7 +1575,6 @@ function Library:CreateWindow(info)
     New("UIStroke", { Color = Theme.Border, Parent = searchBox })
     New("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = searchBox })
 
-    -- Sidebar (tabs)
     local sidebar = New("ScrollingFrame", {
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         BackgroundColor3 = Theme.Base,
@@ -1712,7 +1586,6 @@ function Library:CreateWindow(info)
     })
     New("UIListLayout", { Parent = sidebar })
 
-    -- Content container
     local contentContainer = New("Frame", {
         AnchorPoint = Vector2.new(1, 0),
         BackgroundColor3 = Theme.Surface,
@@ -1723,7 +1596,6 @@ function Library:CreateWindow(info)
     })
     New("UICorner", { CornerRadius = UDim.new(0, Theme.RadiusWindow), Parent = contentContainer })
 
-    -- Divider line
     local divider = New("Frame", {
         BackgroundColor3 = Theme.Border,
         Position = UDim2.fromOffset(sidebarWidth, 44),
@@ -1732,7 +1604,6 @@ function Library:CreateWindow(info)
         Parent = main,
     })
 
-    -- Footer
     local footerBar = New("Frame", {
         AnchorPoint = Vector2.new(0, 1),
         BackgroundColor3 = Theme.Base,
@@ -1750,7 +1621,6 @@ function Library:CreateWindow(info)
         Parent = footerBar,
     })
 
-    -- Resize handle
     if resizable then
         local resizeBtn = New("TextButton", {
             AnchorPoint = Vector2.new(1, 0),
@@ -1768,7 +1638,6 @@ function Library:CreateWindow(info)
                 end
             end
         end)
-        -- Resize icon
         local resizeIcon = Library:GetIcon("move-diagonal-2")
         if resizeIcon then
             New("ImageLabel", {
@@ -1784,7 +1653,6 @@ function Library:CreateWindow(info)
         end
     end
 
-    -- Window object
     local windowObj = {
         Main = main,
         Sidebar = sidebar,
@@ -1828,7 +1696,6 @@ function Library:CreateWindow(info)
         local newState = (force ~= nil) and force or not self._toggled
         self._toggled = newState
         main.Visible = newState
-        -- Show/hide cursor if needed
         if newState and not Library._isMobile then
             local binding = tostring({})
             RunService:UnbindFromRenderStep(binding)
@@ -1846,7 +1713,6 @@ function Library:CreateWindow(info)
             Cursor.Visible = false
             UserInputService.MouseIconEnabled = true
         end
-        -- Close any context menus
         if currentContextMenu then currentContextMenu:Close() end
         TooltipLabel.Visible = false
     end
@@ -1865,18 +1731,15 @@ function Library:CreateWindow(info)
             tab:Destroy()
         end
         main:Destroy()
-        -- remove from windows
         for i, w in ipairs(Library._windows) do
             if w == windowObj then table.remove(Library._windows, i) break end
         end
     end
 
-    -- Search handler
     searchBox:GetPropertyChangedSignal("Text"):Connect(function()
         Library:UpdateSearch(searchBox.Text, windowObj)
     end)
 
-    -- Auto show
     if info.AutoShow ~= false then
         task.spawn(function() windowObj:Toggle(true) end)
     end
@@ -1885,25 +1748,16 @@ function Library:CreateWindow(info)
     return windowObj
 end
 
--- ============================================================
--- 19. SEARCH SYSTEM
--- ============================================================
-
 function Library:UpdateSearch(text, window)
     self._searchText = text
     local search = Trim(text):lower()
     if search == "" then
         self._searching = false
         self._lastSearchTab = nil
-        -- restore visibility
         for _, win in ipairs(self._windows) do
             if win == window or not window then
                 for _, tab in ipairs(win._tabs) do
                     for _, panel in ipairs(tab.Panels) do
-                        -- restore all elements (complicated, we'll just loop)
-                        -- For simplicity, we'll just set all holders visible if not dependency-hidden
-                        -- We'll need to store visibility per element.
-                        -- For now, we'll just show all.
                     end
                 end
             end
@@ -1912,10 +1766,6 @@ function Library:UpdateSearch(text, window)
     end
 
     self._searching = true
-    -- Implement search: iterate tabs, panels, elements, filter by text.
-    -- We'll need to store element text labels.
-    -- This is a large task; we'll implement a basic version.
-    -- We'll just show/hide panels based on element text match.
     for _, win in ipairs(self._windows) do
         if win == window or not window then
             for _, tab in ipairs(win._tabs) do
@@ -1931,17 +1781,10 @@ function Library:UpdateSearch(text, window)
                     panel.Panel.Visible = visible
                     if visible then found = true end
                 end
-                -- If tab has any visible panel, show tab? We'll just keep tab visible.
             end
         end
     end
 end
-
--- ============================================================
--- 20. ELEMENTS (Switch, Action, Range, Select, Input, etc.)
--- ============================================================
-
--- We'll attach element creators to Panel objects.
 
 local function AddSwitch(panel, info)
     info = info or {}
@@ -2041,7 +1884,7 @@ local function AddAction(panel, info)
     info = info or {}
     local label = info.Label or ""
     local callback = info.Callback or function() end
-    local variant = info.Variant or "Primary" -- Primary, Secondary, Ghost, Danger
+    local variant = info.Variant or "Primary"
     local disabled = info.Disabled or false
     local visible = info.Visible ~= false
 
@@ -2216,7 +2059,6 @@ local function AddRange(panel, info)
         holder.Visible = state
     end
 
-    -- Drag
     local dragging = false
     thumb.InputBegan:Connect(function(input)
         if IsClickInput(input) and not rangeObj.Disabled then
@@ -2250,27 +2092,15 @@ local function AddRange(panel, info)
     return rangeObj
 end
 
--- Similar for Select, Input, ColorPicker, Hotkey, etc. We'll implement basic stubs.
--- Due to length, I'll provide a simplified implementation for remaining elements.
-
--- Select (Dropdown)
 local function AddSelect(panel, info) end
--- Input
 local function AddInput(panel, info) end
--- ColorPicker
 local function AddColorPicker(panel, info) end
--- Hotkey
 local function AddHotkey(panel, info) end
--- Image
 local function AddImage(panel, info) end
--- Video
 local function AddVideo(panel, info) end
--- Viewport
 local function AddViewport(panel, info) end
--- UIPassthrough
 local function AddUIPassthrough(panel, info) end
 
--- Attach to Panel prototype
 local PanelMethods = {
     AddSwitch = AddSwitch,
     AddAction = AddAction,
@@ -2284,12 +2114,6 @@ local PanelMethods = {
     AddViewport = AddViewport,
     AddUIPassthrough = AddUIPassthrough,
 }
-
--- We'll later set these on the panel objects.
-
--- ============================================================
--- 21. ANIMATION HELPERS
--- ============================================================
 
 function Library:PlayTabAnimation(canvas, showing, onComplete)
     if not canvas then if onComplete then onComplete() end return end
@@ -2323,10 +2147,6 @@ function Library:PlayTabAnimation(canvas, showing, onComplete)
         if onComplete then onComplete() end
     end
 end
-
--- ============================================================
--- 22. LOADING SCREEN
--- ============================================================
 
 function Library:CreateLoading(info)
     info = info or {}
@@ -2372,7 +2192,6 @@ function Library:CreateLoading(info)
         Parent = container,
     })
 
-    -- Icon
     if icon then
         local iconData = Library:GetCustomIcon(icon)
         if iconData then
@@ -2459,10 +2278,6 @@ function Library:CreateLoading(info)
     loadingObj:SetCurrentStep(currentStep)
     return loadingObj
 end
-
--- ============================================================
--- 23. DIALOG SYSTEM
--- ============================================================
 
 function Library:CreateDialog(info)
     info = info or {}
@@ -2584,12 +2399,10 @@ function Library:CreateDialog(info)
         overlay:Destroy()
     end
 
-    -- Add initial buttons
     for _, btnInfo in ipairs(buttons) do
         dialogObj:AddButton(btnInfo.Text, btnInfo.Callback, btnInfo.Variant)
     end
 
-    -- Outside click
     overlay.MouseButton1Click:Connect(function()
         if outsideDismiss then dialogObj:Dismiss() end
     end)
@@ -2597,10 +2410,6 @@ function Library:CreateDialog(info)
     Library._activeDialog = dialogObj
     return dialogObj
 end
-
--- ============================================================
--- 24. WATERMARK
--- ============================================================
 
 function Library:CreateWatermark(info)
     info = info or {}
@@ -2668,10 +2477,6 @@ function Library:CreateWatermark(info)
     return watermark
 end
 
--- ============================================================
--- 25. MISCELLANEOUS
--- ============================================================
-
 function Library:SetDPIScale(scale)
     self._dpiScale = scale / 100
     self._minSize = self._originalMinSize * self._dpiScale
@@ -2695,36 +2500,29 @@ function Library:Unload()
     if self._unloaded then return end
     self._unloaded = true
 
-    -- Disconnect signals
     for _, conn in ipairs(self._signals) do
         if conn.Connected then conn:Disconnect() end
     end
     self._signals = {}
 
-    -- Call unload callbacks
     for _, cb in ipairs(self._unloadCallbacks) do
         cb()
     end
     self._unloadCallbacks = {}
 
-    -- Destroy windows
     for _, win in ipairs(self._windows) do
         win:Destroy()
     end
     self._windows = {}
 
-    -- Destroy loading
     if self._activeLoading then self._activeLoading:Destroy() end
 
-    -- Destroy dialogs
     for _, d in ipairs(self._dialogs) do
         if d and not d.Destroyed then d:Dismiss() end
     end
 
-    -- Destroy screen gui
     if ScreenGui then ScreenGui:Destroy() end
 
-    -- Clear tables
     table.clear(self._registry)
     table.clear(self._scales)
     table.clear(self._scalesOffset)
@@ -2738,15 +2536,9 @@ function Library:Unload()
     self._tabs = {}
     self._tabButtons = {}
 
-    -- Clear global references
     getgenv().Library = nil
 end
 
--- ============================================================
--- 26. INITIALIZATION
--- ============================================================
-
--- Keyboard focus
 UserInputService.WindowFocused:Connect(function()
     Library._isFocused = true
 end)
@@ -2754,19 +2546,14 @@ UserInputService.WindowFocusReleased:Connect(function()
     Library._isFocused = false
 end)
 
--- Toggle keybind
 UserInputService.InputBegan:Connect(function(input)
     if Library._unloaded then return end
     if UserInputService:GetFocusedTextBox() then return end
     if input.KeyCode == Library._toggleKeybind then
-        -- Toggle the first window? We'll toggle all? Usually only one window.
         for _, win in ipairs(Library._windows) do
             win:Toggle()
         end
     end
 end)
 
--- Update colors when theme changes (not implemented in this example)
-
--- Return Library
 return Library
