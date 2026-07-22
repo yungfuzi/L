@@ -95,6 +95,12 @@ local Library = {
 		DarkColor = Color3.new(0, 0, 0),
 		WhiteColor = Color3.new(1, 1, 1),
 	},
+	Animation = {
+		Enabled = true,
+		Duration = 0.25,
+		EasingStyle = Enum.EasingStyle.Quad,
+		EasingDirection = Enum.EasingDirection.Out,
+	},
 	Registry = {},
 	Templates = Templates,
 	OriginalMinSize = Vector2.new(480, 360),
@@ -234,14 +240,15 @@ function Library:MakeDraggable(UI, DragFrame)
 	local Dragging = false
 	local StartPos = nil
 	local FramePos = nil
-	DragFrame.InputBegan:Connect(function(Input)
+	DragFrame.InputBegan:Connect(function(Input, Processed)
+		if Processed then return end
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Dragging = true
 			StartPos = Input.Position
 			FramePos = UI.Position
 		end
 	end)
-	DragFrame.InputEnded:Connect(function(Input)
+	UserInputService.InputEnded:Connect(function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Dragging = false
 		end
@@ -554,11 +561,18 @@ function Library:CreateTab(ButtonContainer, ContentContainer, Name, Icon)
 		Parent = ScrollFrame,
 	})
 
+	local ScrollList = self:New("UIListLayout", {
+		Padding = UDim.new(0, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = ScrollFrame,
+	})
+
 	local ColumnsContainer = self:New("Frame", {
 		Name = Name .. "Columns",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -12, 0, 0), 
+		Size = UDim2.new(1, 0, 0, 0), 
 		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 10,
 		Parent = ScrollFrame,
 	})
 
@@ -610,16 +624,45 @@ function Library:CreateTab(ButtonContainer, ContentContainer, Name, Icon)
 			self.TabButton.BackgroundTransparency = 0.95
 			self.Label.TextTransparency = 0
 			self.Canvas.Visible = true
+			if Library.Animation.Enabled then
+				self.Canvas.GroupTransparency = 1
+				TweenService:Create(self.Canvas, TweenInfo.new(
+					Library.Animation.Duration,
+					Library.Animation.EasingStyle,
+					Library.Animation.EasingDirection
+					), {GroupTransparency = 0}):Play()
+			else
+				self.Canvas.GroupTransparency = 0
+			end
 			Library.ActiveTab = self
 		end,
 		Hide = function(self)
 			self.Active = false
 			self.TabButton.BackgroundTransparency = 1
 			self.Label.TextTransparency = 0.5
-			self.Canvas.Visible = false
+			if Library.Animation.Enabled then
+				local tween = TweenService:Create(self.Canvas, TweenInfo.new(
+					Library.Animation.Duration * 0.8,
+					Library.Animation.EasingStyle,
+					Library.Animation.EasingDirection
+					), {GroupTransparency = 1})
+				tween:Play()
+				task.delay(Library.Animation.Duration * 0.8, function()
+					if not self.Active then
+						self.Canvas.Visible = false
+					end
+				end)
+			else
+				self.Canvas.Visible = false
+			end
 			if Library.ActiveTab == self then
 				Library.ActiveTab = nil
 			end
+		end,
+		AddSingleGroupbox = function(self, Title, Icon, Collapsed, Center)
+			local Group = Library:CreateGroupbox(self.ScrollFrame, Title, Icon, Collapsed, Center)
+			Group.BoxHolder.LayoutOrder = 1
+			return Group
 		end,
 		AddLeftGroupbox = function(self, Title, Icon, Collapsed, Center)
 			return Library:CreateGroupbox(self.LeftSide, Title, Icon, Collapsed, Center)
@@ -733,6 +776,7 @@ function Library:CreateGroupbox(Container, Title, Icon, Collapsed, Center)
 	})
 	self:New("UIListLayout", {
 		Padding = UDim.new(0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
 		Parent = Content,
 	})
 	self:New("UIPadding", {
@@ -758,56 +802,84 @@ function Library:CreateGroupbox(Container, Title, Icon, Collapsed, Center)
 		Elements = {},
 		Visible = true,
 
-		AddLabel = function(self, Text, Name)
-			local Label = Library:CreateLabel(self.Content, Text, Name or Text)
+		AddLabel = function(self, Idx, Config)
+			if type(Config) == "string" or not Config then
+				Config = {Text = Idx}
+			end
+			local Label = Library:CreateLabel(self.Content, Idx, Config)
+			Label.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Label)
 			return Label
 		end,
 
-		AddButton = function(self, Text, Callback, Name)
-			local Button = Library:CreateButton(self.Content, Text, Callback, Name or Text)
+		AddButton = function(self, Idx, Callback, Config)
+			if type(Callback) == "table" then
+				Config = Callback
+			else
+				Config = Config or {}
+				Config.Callback = Callback or Config.Callback
+			end
+			local Button = Library:CreateButton(self.Content, Idx, Config)
+			Button.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Button)
 			return Button
 		end,
 
-		AddToggle = function(self, Text, Default, Callback, Name)
-			local Toggle = Library:CreateToggle(self.Content, Text, Default, Callback, Name or Text)
+		AddToggle = function(self, Idx, Default, Callback, Config)
+			if type(Default) == "table" then
+				Config = Default
+			elseif type(Callback) == "table" then
+				Config = Callback
+				Config.Default = Default
+			else
+				Config = Config or {}
+				Config.Default = (Default ~= nil) and Default or Config.Default
+				Config.Callback = Callback or Config.Callback
+			end
+			local Toggle = Library:CreateToggle(self.Content, Idx, Config)
+			Toggle.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Toggle)
 			return Toggle
 		end,
 
 		AddSlider = function(self, Idx, Config)
 			local Slider = Library:CreateSlider(self.Content, Idx, Config)
+			Slider.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Slider)
 			return Slider
 		end,
 
 		AddDropdown = function(self, Idx, Config)
 			local Dropdown = Library:CreateDropdown(self.Content, Idx, Config)
+			Dropdown.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Dropdown)
 			return Dropdown
 		end,
 
 		AddInput = function(self, Idx, Config)
 			local Input = Library:CreateInput(self.Content, Idx, Config)
+			Input.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Input)
 			return Input
 		end,
 
 		AddKeybind = function(self, Idx, Config)
 			local Keybind = Library:CreateKeybind(self.Content, Idx, Config)
+			Keybind.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Keybind)
 			return Keybind
 		end,
 
 		AddParagraph = function(self, Idx, Config)
 			local Paragraph = Library:CreateParagraph(self.Content, Idx, Config)
+			Paragraph.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Paragraph)
 			return Paragraph
 		end,
 
 		AddColorPicker = function(self, Idx, Config)
 			local Picker = Library:CreateColorPicker(self.Content, Idx, Config)
+			Picker.Holder.LayoutOrder = #self.Elements + 1
 			table.insert(self.Elements, Picker)
 			return Picker
 		end,
@@ -903,8 +975,10 @@ function Library:CreateGroupbox(Container, Title, Icon, Collapsed, Center)
 	return Groupbox
 end
 
-function Library:CreateLabel(Container, Text, Name)
-	Name = Name or Text or "Label"
+function Library:CreateLabel(Container, Idx, Config)
+	Config = Config or {}
+	local Text = Config.Text or Idx or "Label"
+	local Name = Idx or Text or "Label"
 	local Holder = self:New("Frame", {
 		Name = Name .. "Holder",
 		BackgroundTransparency = 1,
@@ -915,7 +989,7 @@ function Library:CreateLabel(Container, Text, Name)
 		Name = Name .. "Label",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 1, 0),
-		Text = Text or "Label",
+		Text = Text,
 		TextSize = 14,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = Holder,
@@ -937,13 +1011,33 @@ function Library:CreateLabel(Container, Text, Name)
 		Destroy = function(self)
 			self.Holder:Destroy()
 		end,
+		Link = function(self, Idx, Config)
+			local SettingsBtn = Library:New("ImageButton", {
+				Name = "SettingsLink",
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, 0, 0.5, 0),
+				Size = UDim2.fromOffset(16, 16),
+				Image = "rbxassetid://106205298246017",
+				ImageColor3 = "FontColor",
+				ImageTransparency = 0.4,
+				Parent = self.Holder,
+			})
+			self.Label.Size = UDim2.new(1, -24, 1, 0)
+
+			local LinkObj = Library:CreateLinkContainer(Idx, Config, SettingsBtn)
+			return LinkObj
+		end,
 	}
 	table.insert(Library.Labels, LabelObject)
 	return LabelObject
 end
 
-function Library:CreateButton(Container, Text, Callback, Name)
-	Name = Name or Text or "Button"
+function Library:CreateButton(Container, Idx, Config)
+	Config = Config or {}
+	local Text = Config.Text or Idx or "Button"
+	local Callback = Config.Callback or function() end
+	local Name = Idx or Text or "Button"
 	local Holder = self:New("Frame", {
 		Name = Name .. "Holder",
 		BackgroundTransparency = 1,
@@ -954,7 +1048,7 @@ function Library:CreateButton(Container, Text, Callback, Name)
 		Name = Name .. "Button",
 		BackgroundColor3 = "MainColor",
 		Size = UDim2.fromScale(1, 1),
-		Text = Text or "Button",
+		Text = Text,
 		TextSize = 14,
 		TextTransparency = 0.4,
 		Parent = Holder,
@@ -1015,9 +1109,12 @@ function Library:CreateButton(Container, Text, Callback, Name)
 	return ButtonObject
 end
 
-function Library:CreateToggle(Container, Text, Default, Callback, Name)
-	Name = Name or Text or "Toggle"
-	Default = Default or false
+function Library:CreateToggle(Container, Idx, Config)
+	Config = Config or {}
+	local Text = Config.Text or Idx or "Toggle"
+	local Default = Config.Default or false
+	local Callback = Config.Callback or function() end
+	local Name = Idx or Text or "Toggle"
 	local Holder = self:New("Frame", {
 		Name = Name .. "Holder",
 		BackgroundTransparency = 1,
@@ -1035,7 +1132,7 @@ function Library:CreateToggle(Container, Text, Default, Callback, Name)
 		Name = Name .. "Label",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -40, 1, 0),
-		Text = Text or "Toggle",
+		Text = Text,
 		TextSize = 14,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = Button,
@@ -1127,6 +1224,23 @@ function Library:CreateToggle(Container, Text, Default, Callback, Name)
 		end,
 		Destroy = function(self)
 			self.Holder:Destroy()
+		end,
+		Link = function(self, Idx, Config)
+			local SettingsBtn = Library:New("ImageButton", {
+				Name = "SettingsLink",
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(1, 0.5),
+				Position = UDim2.new(1, -40, 0.5, 0),
+				Size = UDim2.fromOffset(16, 16),
+				Image = "rbxassetid://106205298246017",
+				ImageColor3 = "FontColor",
+				ImageTransparency = 0.4,
+				Parent = self.Button,
+			})
+			self.Label.Size = UDim2.new(1, -64, 1, 0)
+
+			local LinkObj = Library:CreateLinkContainer(Idx, Config, SettingsBtn)
+			return LinkObj
 		end,
 	}
 	ToggleObject.Scheme = self.Scheme
@@ -1396,7 +1510,6 @@ function Library:CreateDropdown(Container, Idx, Config)
 		Parent = Button,
 	})
 
-	-- Dropdown list: dùng ScrollingFrame thay vì Frame để có scroll nếu nhiều option
 	local DropdownFrame = self:New("ScrollingFrame", {
 		Name = BaseName .. "Dropdown",
 		BackgroundColor3 = "MainColor",
@@ -1583,8 +1696,6 @@ function Library:CreateDropdown(Container, Idx, Config)
 
 	DropdownObject:RefreshOptions()
 
-	-- CloseOnSelected: tự động đóng khi chọn option (single mode)
-	-- Mặc định: true cho single, false cho multi
 	local CloseOnSelected = Config.CloseOnSelected
 	if CloseOnSelected == nil then
 		CloseOnSelected = not Multi
@@ -1652,7 +1763,6 @@ function Library:CreateInput(Container, Idx, Config)
 		Parent = Box,
 	})
 
-	-- Focus effect: stroke đổi màu accent khi focus
 	Box.Focused:Connect(function()
 		TweenService:Create(Box:FindFirstChildOfClass("UIStroke"), TweenInfo.new(0.15), {
 			Color = Library.Scheme.AccentColor,
@@ -2019,28 +2129,33 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Parent = Popup,
 	})
 
-	local DragHandle = self:New("Frame", {
-		Name = "ADragHandle",
-		BackgroundTransparency = 0.6,
-		BackgroundColor3 = "OutlineColor",
-		Size = UDim2.new(1, 0, 0, 6),
+	local TopBar = self:New("Frame", {
+		Name = "TopBar",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 18),
 		LayoutOrder = 1,
 		Active = true,
-		ZIndex = 250,
 		Parent = Popup,
 	})
-	self:New("UICorner", {
-		CornerRadius = UDim.new(1, 0),
-		Parent = DragHandle,
+	self:New("TextLabel", {
+		Name = "TopBarTitle",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Text = Text,
+		TextSize = 13,
+		TextColor3 = "FontColor",
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = TopBar,
 	})
 
-	self:MakeDraggable(Popup, DragHandle)
+	self:MakeDraggable(Popup, TopBar)
 
 	local SVHolder = self:New("Frame", {
 		Name = "SVHolder",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 100),
 		LayoutOrder = 2,
+		Active = true,
 		Parent = Popup,
 	})
 
@@ -2087,6 +2202,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		Size = UDim2.new(1, 0, 0, 14),
 		LayoutOrder = 3,
+		Active = true,
 		Parent = Popup,
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 4), Parent = HueFrame})
@@ -2131,6 +2247,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		BackgroundColor3 = "MainColor",
 		Size = UDim2.new(1, 0, 0, 14),
 		LayoutOrder = 5,
+		Active = true,
 		Parent = Popup,
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 4), Parent = OpacityFrame})
@@ -2159,6 +2276,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 32),
 		LayoutOrder = 6,
+		Active = true,
 		Parent = Popup,
 	})
 	self:New("UIListLayout", {
@@ -2186,18 +2304,19 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Text = string.format("#%02X%02X%02X", Default.R*255, Default.G*255, Default.B*255),
 		PlaceholderText = "#RRGGBB",
 		TextSize = 12,
+		Active = true,
 		Parent = BottomRow,
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = HexBox})
 	self:New("UIStroke", {Color = "OutlineColor", Parent = HexBox})
 	self:New("UIPadding", {PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = HexBox})
 
-	-- RGB Inputs
 	local RGBRow = self:New("Frame", {
 		Name = "RGBRow",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 26),
 		LayoutOrder = 7,
+		Active = true,
 		Parent = Popup,
 	})
 	self:New("UIListLayout", {
@@ -2215,6 +2334,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 			Text = tostring(DefaultVal),
 			PlaceholderText = Name,
 			TextSize = 12,
+			Active = true,
 			Parent = RGBRow,
 		})
 		self:New("UICorner", {CornerRadius = UDim.new(0, 4), Parent = Box})
@@ -2232,6 +2352,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 28),
 		LayoutOrder = 8,
+		Active = true,
 		Parent = Popup,
 	})
 	self:New("UIListLayout", {
@@ -2247,6 +2368,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Text = "Confirm",
 		TextColor3 = "WhiteColor",
 		TextSize = 13,
+		Active = true,
 		Parent = BtnRow,
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = ConfirmBtn})
@@ -2262,7 +2384,6 @@ function Library:CreateColorPicker(Container, Idx, Config)
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 6), Parent = CancelBtn})
 
-	-- State
 	local H, S, V = RGBToHSV(Default.R, Default.G, Default.B)
 	local Alpha = TransparencyDefault
 	local Open = false
@@ -2323,7 +2444,6 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then SVDragging = false end
 	end)
 
-	-- Hue dragging
 	local HueDragging = false
 	HueFrame.InputBegan:Connect(function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
@@ -2373,7 +2493,6 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		end
 	end)
 
-	-- Hex input
 	HexBox.FocusLost:Connect(function()
 		local txt = HexBox.Text:gsub("#", "")
 		if #txt == 6 then
@@ -2387,7 +2506,6 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		UpdateUIFromState()
 	end)
 
-	-- RGB inputs
 	local function HandleRGBBox(Box, Index)
 		Box.FocusLost:Connect(function()
 			local n = tonumber(Box.Text)
@@ -2405,7 +2523,6 @@ function Library:CreateColorPicker(Container, Idx, Config)
 	HandleRGBBox(GBox, 2)
 	HandleRGBBox(BBox, 3)
 
-	-- Open / Close
 	local function PositionPopup()
 		local abs = ColorBtn.AbsolutePosition
 		local scale = self.DPIScale or 1
@@ -2485,13 +2602,356 @@ function Library:CreateColorPicker(Container, Idx, Config)
 	return ColorPickerObject
 end
 
+function Library:CreateLinkContainer(Title, Config, SettingsBtn)
+	Config = Config or {}
+	local Type = Config.Type or 1
+	local ParentGui = self.ScreenGui or gethui()
+
+	local LinkObj = {
+		Title = Title,
+		Type = Type,
+		Elements = {},
+		Visible = false,
+	}
+
+	local Popup
+	local Content
+	local Overlay
+
+	if Type == 1 then
+		Overlay = self:New("Frame", {
+			Name = Title .. "Overlay",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = self.Scheme.DarkColor,
+			BackgroundTransparency = 0.6,
+			Visible = false,
+			ZIndex = 195,
+			Parent = ParentGui,
+		})
+		Popup = self:New("Frame", {
+			Name = Title .. "Popup",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(280, 320),
+			BackgroundColor3 = self.Scheme.BackgroundColor,
+			Visible = false,
+			ZIndex = 196,
+			Parent = ParentGui,
+		})
+		self:New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = Popup})
+		self:New("UIStroke", {Color = "OutlineColor", Parent = Popup})
+		local LinkScale = self:New("UIScale", {Scale = self.DPIScale or 1, Parent = Popup})
+		table.insert(self.Scales, LinkScale)
+
+		local TopBar = self:New("Frame", {
+			Name = "TopBar",
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 40),
+			Parent = Popup,
+		})
+		self:New("UIPadding", {PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), Parent = TopBar})
+		self:New("TextLabel", {
+			Name = "Title",
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -30, 1, 0),
+			Text = Title,
+			TextSize = 14,
+			TextColor3 = "FontColor",
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Parent = TopBar,
+		})
+		local CloseBtn = self:New("ImageButton", {
+			Name = "CloseBtn",
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.fromScale(1, 0.5),
+			Size = UDim2.fromOffset(20, 20),
+			Image = "rbxassetid://116396312853810",
+			ImageColor3 = "FontColor",
+			Parent = TopBar,
+		})
+
+		Content = self:New("ScrollingFrame", {
+			Name = "Scroll",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(0, 40),
+			Size = UDim2.new(1, 0, 1, -40),
+			ScrollBarThickness = 2,
+			ScrollBarImageColor3 = "OutlineColor",
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			Parent = Popup,
+		})
+		self:New("UIPadding", {
+			PaddingBottom = UDim.new(0, 12),
+			PaddingLeft = UDim.new(0, 12),
+			PaddingRight = UDim.new(0, 12),
+			PaddingTop = UDim.new(0, 8),
+			Parent = Content,
+		})
+		local ContentList = self:New("UIListLayout", {
+			Padding = UDim.new(0, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = Content,
+		})
+		self:MakeDraggable(Popup, TopBar)
+
+		local function Open()
+			LinkObj.Visible = true
+			Overlay.Visible = true
+			Popup.Visible = true
+			if self.Animation.Enabled then
+				Popup.Size = UDim2.fromOffset(240, 260)
+				TweenService:Create(Popup, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Size = UDim2.fromOffset(280, 320)
+				}):Play()
+			end
+		end
+		local function Close()
+			LinkObj.Visible = false
+			Overlay.Visible = false
+			Popup.Visible = false
+		end
+		CloseBtn.MouseButton1Click:Connect(Close)
+		SettingsBtn.MouseButton1Click:Connect(function()
+			if LinkObj.Visible then Close() else Open() end
+		end)
+	elseif Type == 2 then
+		Popup = self:New("Frame", {
+			Name = Title .. "Popup",
+			BackgroundColor3 = self.Scheme.BackgroundColor,
+			Size = UDim2.fromOffset(180, 220),
+			Visible = false,
+			ZIndex = 200,
+			Parent = ParentGui,
+		})
+		self:New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = Popup})
+		self:New("UIStroke", {Color = "OutlineColor", Parent = Popup})
+		local LinkScale = self:New("UIScale", {Scale = self.DPIScale or 1, Parent = Popup})
+		table.insert(self.Scales, LinkScale)
+
+		local TopBar = self:New("Frame", {
+			Name = "TopBar",
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 30),
+			Parent = Popup,
+		})
+		self:New("UIPadding", {PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), Parent = TopBar})
+		self:New("TextLabel", {
+			Name = "Title",
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 1, 0),
+			Text = Title,
+			TextSize = 12,
+			TextColor3 = "FontColor",
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Parent = TopBar,
+		})
+		Content = self:New("ScrollingFrame", {
+			Name = "Scroll",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(0, 30),
+			Size = UDim2.new(1, 0, 1, -30),
+			ScrollBarThickness = 2,
+			ScrollBarImageColor3 = "OutlineColor",
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			Parent = Popup,
+		})
+		self:New("UIPadding", {
+			PaddingBottom = UDim.new(0, 8),
+			PaddingLeft = UDim.new(0, 8),
+			PaddingRight = UDim.new(0, 8),
+			PaddingTop = UDim.new(0, 6),
+			Parent = Content,
+		})
+		local ContentList = self:New("UIListLayout", {
+			Padding = UDim.new(0, 6),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = Content,
+		})
+
+		local function PositionPopup()
+			local abs = SettingsBtn.AbsolutePosition
+			local scale = self.DPIScale or 1
+			Popup.Position = UDim2.fromOffset(abs.X - 190 * scale, abs.Y)
+		end
+
+		local function Open()
+			LinkObj.Visible = true
+			PositionPopup()
+			Popup.Visible = true
+		end
+		local function Close()
+			LinkObj.Visible = false
+			Popup.Visible = false
+		end
+		SettingsBtn.MouseButton1Click:Connect(function()
+			if LinkObj.Visible then Close() else Open() end
+		end)
+
+		UserInputService.InputBegan:Connect(function(Input)
+			if not LinkObj.Visible then return end
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+				local pos = Input.Position
+				local pAbs = Popup.AbsolutePosition
+				local pSize = Popup.AbsoluteSize
+				local inPopup = pos.X >= pAbs.X and pos.X <= pAbs.X + pSize.X and pos.Y >= pAbs.Y and pos.Y <= pAbs.Y + pSize.Y
+				local inBtn = pos.X >= SettingsBtn.AbsolutePosition.X and pos.X <= SettingsBtn.AbsolutePosition.X + SettingsBtn.AbsoluteSize.X
+					and pos.Y >= SettingsBtn.AbsolutePosition.Y and pos.Y <= SettingsBtn.AbsolutePosition.Y + SettingsBtn.AbsoluteSize.Y
+				if not inPopup and not inBtn then
+					Close()
+				end
+			end
+		end)
+	elseif Type == 3 then
+		Popup = self:New("Frame", {
+			Name = Title .. "SidePanel",
+			BackgroundColor3 = self.Scheme.BackgroundColor,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1.3, 0, 0, 0),
+			Size = UDim2.new(0, 220, 1, 0),
+			Visible = false,
+			ZIndex = 190,
+			Parent = self.Window and self.Window.MainFrame or ParentGui,
+		})
+		self:New("UICorner", {CornerRadius = UDim.new(0, 24), Parent = Popup})
+		self:New("UIStroke", {Color = "OutlineColor", Parent = Popup})
+
+		local TopBar = self:New("Frame", {
+			Name = "TopBar",
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 48),
+			Parent = Popup,
+		})
+		self:New("UIPadding", {PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16), Parent = TopBar})
+		self:New("TextLabel", {
+			Name = "Title",
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -30, 1, 0),
+			Text = Title,
+			TextSize = 14,
+			TextColor3 = "FontColor",
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Parent = TopBar,
+		})
+		local CloseBtn = self:New("ImageButton", {
+			Name = "CloseBtn",
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.fromScale(1, 0.5),
+			Size = UDim2.fromOffset(20, 20),
+			Image = "rbxassetid://116396312853810",
+			ImageColor3 = "FontColor",
+			Parent = TopBar,
+		})
+		Content = self:New("ScrollingFrame", {
+			Name = "Scroll",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(0, 48),
+			Size = UDim2.new(1, 0, 1, -48),
+			ScrollBarThickness = 2,
+			ScrollBarImageColor3 = "OutlineColor",
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			Parent = Popup,
+		})
+		self:New("UIPadding", {
+			PaddingBottom = UDim.new(0, 12),
+			PaddingLeft = UDim.new(0, 12),
+			PaddingRight = UDim.new(0, 12),
+			PaddingTop = UDim.new(0, 8),
+			Parent = Content,
+		})
+		local ContentList = self:New("UIListLayout", {
+			Padding = UDim.new(0, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = Content,
+		})
+
+		local function Open()
+			Popup.Visible = true
+			Popup.Position = UDim2.new(1.3, 0, 0, 0)
+			LinkObj.Visible = true
+			if self.Animation.Enabled then
+				TweenService:Create(Popup, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Position = UDim2.new(1, 0, 0, 0)
+				}):Play()
+			else
+				Popup.Position = UDim2.new(1, 0, 0, 0)
+			end
+		end
+		local function Close()
+			LinkObj.Visible = false
+			if self.Animation.Enabled then
+				local tween = TweenService:Create(Popup, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+					Position = UDim2.new(1.3, 0, 0, 0)
+				})
+				tween:Play()
+				tween.Completed:Connect(function()
+					if not LinkObj.Visible then
+						Popup.Visible = false
+					end
+				end)
+			else
+				Popup.Position = UDim2.new(1.3, 0, 0, 0)
+				Popup.Visible = false
+			end
+		end
+		CloseBtn.MouseButton1Click:Connect(Close)
+		SettingsBtn.MouseButton1Click:Connect(function()
+			if LinkObj.Visible then Close() else Open() end
+		end)
+
+		UserInputService.InputBegan:Connect(function(Input)
+			if not LinkObj.Visible then return end
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+				local pos = Input.Position
+				local pAbs = Popup.AbsolutePosition
+				local pSize = Popup.AbsoluteSize
+				local inPopup = pos.X >= pAbs.X and pos.X <= pAbs.X + pSize.X and pos.Y >= pAbs.Y and pos.Y <= pAbs.Y + pSize.Y
+				local inBtn = pos.X >= SettingsBtn.AbsolutePosition.X and pos.X <= SettingsBtn.AbsolutePosition.X + SettingsBtn.AbsoluteSize.X
+					and pos.Y >= SettingsBtn.AbsolutePosition.Y and pos.Y <= SettingsBtn.AbsolutePosition.Y + SettingsBtn.AbsoluteSize.Y
+				if not inPopup and not inBtn then
+					Close()
+				end
+			end
+		end)
+	end
+
+	LinkObj.Content = Content
+	LinkObj.Popup = Popup
+
+	setmetatable(LinkObj, {
+		__index = function(tbl, key)
+			if rawget(LinkObj, key) then return rawget(LinkObj, key) end
+			if type(key) == "string" and key:sub(1, 3) == "Add" then
+				local libKey = key:gsub("Add", "Create")
+				if type(self[libKey]) == "function" then
+					return function(_, ...)
+						local obj = self[libKey](self, Content, ...)
+						table.insert(LinkObj.Elements, obj)
+						return obj
+					end
+				end
+			end
+			return nil
+		end
+	})
+
+	return LinkObj
+end
+
 function Library:Window(info)
 	info = info or {}
+	if info.DisableAnimations or info.DisableAnims or info.DisbleAnimations then
+		self.Animation.Enabled = false
+	end
 	info.Title = info.Title or "Uzi Library"
 	info.Description = info.Description or info.Desc or "Library"
 	info.Size = info.Size or UDim2.fromOffset(760, 450)
 	info.Position = info.Position or UDim2.new(0.5, 0, 0.5, 0)
-	info.SizeLocked = info.SizeLocked or false
+	info.SizeLocked = info.SizeLocked or true
 	info.CornerRadius = info.CornerRadius or 24
 
 	local MainColor = self:GetBetterColor(self.Scheme.BackgroundColor, -1)
@@ -2662,6 +3122,7 @@ function Library:Window(info)
 		Size = UDim2.new(0, SidebarWidth, 1, -49),
 		ScrollBarThickness = 0,
 		BackgroundTransparency = 1,
+		AutomaticCanvasSize = Enum.AutomaticSize.XY,
 		CanvasSize = UDim2.new(0, 0, 0, 0),
 		Parent = MainFrame,
 	})
@@ -2860,7 +3321,6 @@ function Library:Window(info)
 				end
 			end)
 		else
-			-- Không text hoặc AlwaysShow: chỉ hover icon
 			Button.MouseEnter:Connect(function()
 				if BtnObject.Disabled then return end
 				if IconLabel then
@@ -2888,16 +3348,6 @@ function Library:Window(info)
 		return BtnObject
 	end
 
-
-	local ThemeOverlay = self:New("Frame", {
-		Name = "ThemeOverlay",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = "DarkColor",
-		BackgroundTransparency = 0.6,
-		Visible = false,
-		ZIndex = 90,
-		Parent = self.ScreenGui,
-	})
 
 	local ThemePopup = self:New("Frame", {
 		Name = "ThemePopup",
@@ -2938,15 +3388,18 @@ function Library:Window(info)
 		Parent = ThemeTopBar,
 	})
 
-	local CloseThemeBtn = self:New("TextButton", {
+	local CloseThemeBtn = self:New("ImageButton", {
 		Name = "CloseThemeBtn",
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.fromScale(1, 0.5),
 		Size = UDim2.fromOffset(28, 28),
-		Text = "✕",
-		TextColor3 = "FontColor",
-		TextSize = 14,
+
+		Image = "rbxassetid://116396312853810",
+		ImageColor3 = "FontColor",
+		ImageTransparency = 0,
+
+		AutoButtonColor = false,
 		Parent = ThemeTopBar,
 	})
 
@@ -3002,7 +3455,6 @@ function Library:Window(info)
 
 	CloseThemeBtn.MouseButton1Click:Connect(function()
 		ThemePopup.Visible = false
-		ThemeOverlay.Visible = false
 	end)
 
 	local WindowObject = {
@@ -3011,6 +3463,7 @@ function Library:Window(info)
 		Title = info.Title,
 		Description = info.Description,
 		MainFrame = MainFrame,
+		MainScale = MainScale,
 		Sidebar = Sidebar,
 		ContentContainer = ContentContainer,
 		Tabs = {},
@@ -3043,7 +3496,59 @@ function Library:Window(info)
 
 		SetVisible = function(self, Visible)
 			self.Visible = Visible
-			self.MainFrame.Visible = Visible
+			if Library.Animation.Enabled then
+				if Visible then
+					self.MainFrame.Visible = true
+					self.MainScale.Scale = 0.85 * (Library.DPIScale or 1)
+					self.MainFrame.Position = UDim2.new(
+						info.Position.X.Scale, info.Position.X.Offset,
+						info.Position.Y.Scale, info.Position.Y.Offset + 50
+					)
+
+					TweenService:Create(self.MainScale, TweenInfo.new(
+						Library.Animation.Duration,
+						Library.Animation.EasingStyle,
+						Library.Animation.EasingDirection
+						), {Scale = Library.DPIScale or 1}):Play()
+
+					TweenService:Create(self.MainFrame, TweenInfo.new(
+						Library.Animation.Duration,
+						Library.Animation.EasingStyle,
+						Library.Animation.EasingDirection
+						), {Position = info.Position}):Play()
+				else
+					local targetPos = UDim2.new(
+						info.Position.X.Scale, info.Position.X.Offset,
+						info.Position.Y.Scale, info.Position.Y.Offset + 50
+					)
+					local targetScale = 0.85 * (Library.DPIScale or 1)
+
+					local t1 = TweenService:Create(self.MainScale, TweenInfo.new(
+						Library.Animation.Duration,
+						Library.Animation.EasingStyle,
+						Library.Animation.EasingDirection
+						), {Scale = targetScale})
+
+					local t2 = TweenService:Create(self.MainFrame, TweenInfo.new(
+						Library.Animation.Duration,
+						Library.Animation.EasingStyle,
+						Library.Animation.EasingDirection
+						), {Position = targetPos})
+
+					t1:Play()
+					t2:Play()
+
+					task.delay(Library.Animation.Duration, function()
+						if not self.Visible then
+							self.MainFrame.Visible = false
+						end
+					end)
+				end
+			else
+				self.MainScale.Scale = Library.DPIScale or 1
+				self.MainFrame.Position = info.Position
+				self.MainFrame.Visible = Visible
+			end
 		end,
 
 		Toggle = function(self)
@@ -3137,7 +3642,6 @@ function Library:Window(info)
 	function WindowObject:ToggleThemeUi()
 		local state = not ThemePopup.Visible
 		ThemePopup.Visible = state
-		ThemeOverlay.Visible = state
 	end
 
 	function WindowObject:DraggableLabel(Config)
@@ -3290,9 +3794,11 @@ function Library:Notify(Config)
 	end
 
 	local Parent = self.NotificationFolder
+	local Dismiss
 
 	local IsMobile = self.IsMobile or false
 	local NotifWidth = IsMobile and 250 or 320
+	local IsToast = (Pos == "toast" or Pos == "topcenter" or Pos == "top-center")
 
 	if not self.NotifyContainers then
 		self.NotifyContainers = {}
@@ -3309,6 +3815,7 @@ function Library:Notify(Config)
 			L.FillDirection = fillDir
 			L.HorizontalAlignment = hAlign
 			L.VerticalAlignment = vAlign
+			L.SortOrder = Enum.SortOrder.LayoutOrder
 			L.Padding = UDim.new(0, 8)
 			L.Parent = F
 			return F
@@ -3316,9 +3823,7 @@ function Library:Notify(Config)
 		self.NotifyContainers.Right = MakeContainer("RightNotif", Vector2.new(1, 0), UDim2.new(1, -20, 0, 20), Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Top)
 		self.NotifyContainers.Left = MakeContainer("LeftNotif", Vector2.new(0, 0), UDim2.new(0, 20, 0, 20), Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Top)
 		self.NotifyContainers.TopCenter = MakeContainer("TopCenterNotif", Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 20), Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Top)
-		self.NotifyContainers.BottomCenter = MakeContainer("BottomCenterNotif", Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, -20), Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Bottom)
 	else
-		-- Ensure container width stays updated if size constraints changed
 		for _, container in pairs(self.NotifyContainers) do
 			container.Size = UDim2.new(0, NotifWidth, 1, 0)
 		end
@@ -3329,145 +3834,202 @@ function Library:Notify(Config)
 		Container = self.NotifyContainers.Left
 	elseif Pos == "right" or Pos == "topright" then
 		Container = self.NotifyContainers.Right
-	elseif Pos == "top-center" or Pos == "topcenter" then
-		Container = self.NotifyContainers.TopCenter
-	elseif Pos == "bottom-center" or Pos == "bottomcenter" then
-		Container = self.NotifyContainers.BottomCenter
 	else
-		Container = self.NotifyContainers.Right
+		Container = self.NotifyContainers.TopCenter
 	end
 
-	local Height = Type == 1 and (IsMobile and 54 or 64) or (IsMobile and 38 or 44)
-	local NotifyFrame = self:New("Frame", {
+	local Height = IsToast and (IsMobile and 32 or 36) or (Type == 1 and (IsMobile and 54 or 64) or (IsMobile and 38 or 44))
+	local TargetWidth = IsToast and (IsMobile and 200 or 260) or NotifWidth
+
+	local NotifyFrameProps = {
 		Name = "Notify",
 		BackgroundColor3 = "BackgroundColor",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, Height),
+		Size = UDim2.new(0, TargetWidth, 0, 0),
 		ZIndex = 1001,
+		ClipsDescendants = true,
+		LayoutOrder = IsToast and -tick() or 0,
 		Parent = Container,
-	})
-	self:New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = NotifyFrame})
-	self:New("UIStroke", {Color = "OutlineColor", Parent = NotifyFrame})
-	self:New("UIPadding", {
-		PaddingLeft = UDim.new(0, 10),
-		PaddingRight = UDim.new(0, 24), 
-		PaddingTop = UDim.new(0, 8),
-		PaddingBottom = UDim.new(0, 8),
-		Parent = NotifyFrame,
-	})
-
-	local IconSize = Type == 1 and (IsMobile and 22 or 28) or (IsMobile and 16 or 22)
-	local IconOffset = Icon and (IconSize + 8) or 0
-
-	if Icon then
-		local IconData = self:GetCustomIcon(Icon)
-		self:New("ImageLabel", {
-			Name = "NotifyIcon",
-			Image = IconData and IconData.Url or "",
-			ImageRectOffset = IconData and IconData.ImageRectOffset or Vector2.zero,
-			ImageRectSize = IconData and IconData.ImageRectSize or Vector2.zero,
-			ImageColor3 = "FontColor",
-			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(IconSize, IconSize),
-			Position = UDim2.fromOffset(0, Type == 1 and (IsMobile and 6 or 4) or (IsMobile and 3 or 2)),
-			ZIndex = 1002,
-			Parent = NotifyFrame,
-		})
+	}
+	if IsToast then
+		NotifyFrameProps.Text = ""
+		NotifyFrameProps.AutoButtonColor = false
 	end
+	local NotifyFrame = self:New(IsToast and "TextButton" or "Frame", NotifyFrameProps)
+	self:New("UICorner", {CornerRadius = UDim.new(0, IsToast and 18 or 8), Parent = NotifyFrame})
+	self:New("UIStroke", {Color = "OutlineColor", Parent = NotifyFrame})
 
-	local TitleSize = IsMobile and 12 or 14
-	local ContentSize = IsMobile and 10 or 12
-
-	if Type == 1 then
-		self:New("TextLabel", {
-			Name = "NotifyTitle",
-			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(IconOffset, 0),
-			Size = UDim2.new(1, -IconOffset, 0, IsMobile and 15 or 18),
-			Text = Title,
-			TextSize = TitleSize,
-			TextColor3 = "FontColor",
-			TextXAlignment = Enum.TextXAlignment.Left,
-			RichText = RichText,
-			ZIndex = 1002,
+	if IsToast then
+		self:New("UIPadding", {
+			PaddingLeft = UDim.new(0, 14),
+			PaddingRight = UDim.new(0, 14), 
 			Parent = NotifyFrame,
 		})
+		local RowList = self:New("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 8),
+			Parent = NotifyFrame,
+		})
+
+		local IconSize = IsMobile and 16 or 20
+		if Icon then
+			local IconData = self:GetCustomIcon(Icon)
+			self:New("ImageLabel", {
+				Name = "NotifyIcon",
+				Image = IconData and IconData.Url or "",
+				ImageRectOffset = IconData and IconData.ImageRectOffset or Vector2.zero,
+				ImageRectSize = IconData and IconData.ImageRectSize or Vector2.zero,
+				ImageColor3 = "FontColor",
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(IconSize, IconSize),
+				ZIndex = 1002,
+				Parent = NotifyFrame,
+			})
+		end
+
 		self:New("TextLabel", {
 			Name = "NotifyContent",
 			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(IconOffset, IsMobile and 16 or 20),
-			Size = UDim2.new(1, -IconOffset, 1, IsMobile and -16 or -20),
-			Text = Content,
-			TextSize = ContentSize,
+			Size = UDim2.new(1, Icon and -(IconSize + 8) or 0, 1, 0),
+			Text = Content ~= "" and Content or Title,
+			TextSize = IsMobile and 11 or 13,
 			TextColor3 = "FontColor",
-			TextTransparency = 0.35,
-			TextXAlignment = Enum.TextXAlignment.Left,
+			TextXAlignment = Enum.TextXAlignment.Center,
 			TextWrapped = true,
 			RichText = RichText,
 			ZIndex = 1002,
 			Parent = NotifyFrame,
 		})
 	else
-		self:New("TextLabel", {
-			Name = "NotifyContent",
-			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(IconOffset, 0),
-			Size = UDim2.new(1, -IconOffset, 1, 0),
-			Text = Content,
-			TextSize = IsMobile and 11 or 13,
-			TextColor3 = "FontColor",
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextWrapped = true,
-			RichText = RichText,
-			ZIndex = 1002,
+		self:New("UIPadding", {
+			PaddingLeft = UDim.new(0, 10),
+			PaddingRight = UDim.new(0, 24), 
+			PaddingTop = UDim.new(0, 8),
+			PaddingBottom = UDim.new(0, 8),
 			Parent = NotifyFrame,
 		})
+
+		local IconSize = Type == 1 and (IsMobile and 22 or 28) or (IsMobile and 16 or 22)
+		local IconOffset = Icon and (IconSize + 8) or 0
+
+		if Icon then
+			local IconData = self:GetCustomIcon(Icon)
+			self:New("ImageLabel", {
+				Name = "NotifyIcon",
+				Image = IconData and IconData.Url or "",
+				ImageRectOffset = IconData and IconData.ImageRectOffset or Vector2.zero,
+				ImageRectSize = IconData and IconData.ImageRectSize or Vector2.zero,
+				ImageColor3 = "FontColor",
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(IconSize, IconSize),
+				Position = UDim2.fromOffset(0, Type == 1 and (IsMobile and 6 or 4) or (IsMobile and 3 or 2)),
+				ZIndex = 1002,
+				Parent = NotifyFrame,
+			})
+		end
+
+		local TitleSize = IsMobile and 12 or 14
+		local ContentSize = IsMobile and 10 or 12
+
+		if Type == 1 then
+			self:New("TextLabel", {
+				Name = "NotifyTitle",
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(IconOffset, 0),
+				Size = UDim2.new(1, -IconOffset, 0, IsMobile and 15 or 18),
+				Text = Title,
+				TextSize = TitleSize,
+				TextColor3 = "FontColor",
+				TextXAlignment = Enum.TextXAlignment.Left,
+				RichText = RichText,
+				ZIndex = 1002,
+				Parent = NotifyFrame,
+			})
+			self:New("TextLabel", {
+				Name = "NotifyContent",
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(IconOffset, IsMobile and 16 or 20),
+				Size = UDim2.new(1, -IconOffset, 1, IsMobile and -16 or -20),
+				Text = Content,
+				TextSize = ContentSize,
+				TextColor3 = "FontColor",
+				TextTransparency = 0.35,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextWrapped = true,
+				RichText = RichText,
+				ZIndex = 1002,
+				Parent = NotifyFrame,
+			})
+		else
+			self:New("TextLabel", {
+				Name = "NotifyContent",
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(IconOffset, 0),
+				Size = UDim2.new(1, -IconOffset, 1, 0),
+				Text = Content,
+				TextSize = IsMobile and 11 or 13,
+				TextColor3 = "FontColor",
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextWrapped = true,
+				RichText = RichText,
+				ZIndex = 1002,
+				Parent = NotifyFrame,
+			})
+		end
+
+		local DismissBtn = self:New("ImageButton", {
+			Name = "DismissBtn",
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, 16, 0.5, 0),
+			Size = UDim2.fromOffset(18, 18),
+			Image = "rbxassetid://116396312853810",
+			ImageColor3 = "FontColor",
+			ImageTransparency = 0.5,
+			AutoButtonColor = false,
+			ZIndex = 1003,
+			Parent = NotifyFrame,
+		})
+		DismissBtn.MouseButton1Click:Connect(function()
+			Dismiss()
+		end)
 	end
 
-	local DismissBtn = self:New("ImageButton", {
-		Name = "DismissBtn",
-		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, 16, 0.5, 0),
-		Size = UDim2.fromOffset(18, 18),
-
-		Image = "rbxassetid://116396312853810",
-		ImageColor3 = "FontColor",
-		ImageTransparency = 0.5,
-
-		AutoButtonColor = false,
-		ZIndex = 1003,
-		Parent = NotifyFrame,
-	})
+	if IsToast then
+		NotifyFrame.MouseButton1Click:Connect(function()
+			Dismiss()
+		end)
+	end
 
 	local dismissed = false
-	local function Dismiss()
+	Dismiss = function()
 		if dismissed then return end
 		dismissed = true
-		local T = TweenService:Create(NotifyFrame, TweenInfo.new(0.2), {BackgroundTransparency = 1})
+		local T = TweenService:Create(NotifyFrame, TweenInfo.new(0.2), {Size = UDim2.new(0, TargetWidth, 0, 0)})
 		T:Play()
 		for _, child in ipairs(NotifyFrame:GetDescendants()) do
 			if child:IsA("TextLabel") or child:IsA("TextButton") then
-				TweenService:Create(child, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+				TweenService:Create(child, TweenInfo.new(0.15), {TextTransparency = 1}):Play()
 			end
 			if child:IsA("ImageLabel") or child:IsA("ImageButton") then
-				TweenService:Create(child, TweenInfo.new(0.2), {ImageTransparency = 1}):Play()
-			end
-			if child:IsA("Frame") and child ~= NotifyFrame then
-				TweenService:Create(child, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+				TweenService:Create(child, TweenInfo.new(0.15), {ImageTransparency = 1}):Play()
 			end
 		end
 		T.Completed:Wait()
 		NotifyFrame:Destroy()
 	end
 
-	DismissBtn.MouseButton1Click:Connect(Dismiss)
-
+	TweenService:Create(NotifyFrame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0, TargetWidth, 0, Height)
+	}):Play()
 	TweenService:Create(NotifyFrame, TweenInfo.new(0.25), {BackgroundTransparency = 0.05}):Play()
+
 	for _, child in ipairs(NotifyFrame:GetDescendants()) do
 		if child:IsA("TextLabel") then
-			TweenService:Create(child, TweenInfo.new(0.25), {TextTransparency = child.Name == "NotifyContent" and 0.35 or 0}):Play()
-		elseif child:IsA("ImageLabel") then
+			TweenService:Create(child, TweenInfo.new(0.25), {TextTransparency = child.Name == "NotifyContent" and (IsToast and 0 or 0.35) or 0}):Play()
+		elseif child:IsA("ImageLabel") and child.Name ~= "DismissBtn" then
 			TweenService:Create(child, TweenInfo.new(0.25), {ImageTransparency = 0}):Play()
 		end
 	end
@@ -3477,6 +4039,60 @@ function Library:Notify(Config)
 			Dismiss()
 		end
 	end)
+end
+
+function Library:OnUnload(Callback)
+	if type(Callback) ~= "function" then
+		error("Library:OnUnload() expects a function, got " .. type(Callback))
+	end
+	table.insert(self.UnloadCallbacks, Callback)
+end
+
+function Library:Unload()
+	if self.Unloaded then return end
+	self.Unloaded = true
+
+	for _, Callback in ipairs(self.UnloadCallbacks) do
+		local success, err = pcall(Callback)
+		if not success then
+			warn("Error in unload callback:", err)
+		end
+	end
+
+	if self.ScreenGui then
+		self.ScreenGui:Destroy()
+	end
+
+	if self.NotificationFolder then
+		self.NotificationFolder:Destroy()
+	end
+
+	self.Window = nil
+	self.WindowContainer = nil
+	self.ActiveTab = nil
+	self.Tabs = {}
+	self.TabGroups = {}
+	self.Labels = {}
+	self.Buttons = {}
+	self.Toggles = {}
+	self.Options = {}
+	self.Tooltips = {}
+end
+
+local OriginalWindowFunction = Library.Window
+
+Library.Window = function(info)
+	local Window = OriginalWindowFunction(info)
+
+	Window.Unload = function(self)
+		Library:Unload()
+	end
+
+	Window.OnUnload = function(self, Callback)
+		Library:OnUnload(Callback)
+	end
+
+	return Window
 end
 
 return Library
