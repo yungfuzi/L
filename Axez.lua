@@ -1,4 +1,3 @@
-
 local cloneref = (cloneref or clonereference or function(instance: any)
 	return instance
 end)
@@ -90,7 +89,7 @@ local Library = {
 		AccentColor = Color3.fromRGB(0, 200, 255),
 		OutlineColor = Color3.fromRGB(40, 40, 40),
 		FontColor = Color3.new(1, 1, 1),
-		Font = Font.fromEnum(Enum.Font.Code),
+		Font = Font.fromEnum(Enum.Font.Roboto),
 		RedColor = Color3.fromRGB(255, 50, 50),
 		DestructiveColor = Color3.fromRGB(220, 38, 38),
 		DarkColor = Color3.new(0, 0, 0),
@@ -236,19 +235,19 @@ function Library:MakeDraggable(UI, DragFrame)
 	local StartPos = nil
 	local FramePos = nil
 	DragFrame.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Dragging = true
 			StartPos = Input.Position
 			FramePos = UI.Position
 		end
 	end)
 	DragFrame.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Dragging = false
 		end
 	end)
 	UserInputService.InputChanged:Connect(function(Input)
-		if Dragging and Input.UserInputType == Enum.UserInputType.MouseMovement then
+		if Dragging and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
 			local Delta = Input.Position - StartPos
 			UI.Position = UDim2.new(
 				FramePos.X.Scale, FramePos.X.Offset + Delta.X,
@@ -264,19 +263,19 @@ function Library:MakeResizable(UI, ResizeButton)
 	local FrameSize = nil
 	local MinSize = self.MinSize or Vector2.new(300, 200)
 	ResizeButton.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Dragging = true
 			StartPos = Input.Position
 			FrameSize = UI.Size
 		end
 	end)
 	ResizeButton.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Dragging = false
 		end
 	end)
 	UserInputService.InputChanged:Connect(function(Input)
-		if Dragging and Input.UserInputType == Enum.UserInputType.MouseMovement then
+		if Dragging and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
 			local Delta = Input.Position - StartPos
 			UI.Size = UDim2.new(
 				FrameSize.X.Scale,
@@ -1166,13 +1165,12 @@ function Library:CreateSlider(Container, Idx, Config)
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, -65, 0, 16),
 		Text = Text,
-		TextSize = 12,
+		TextSize = 15,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTransparency = 0.3,
 		Parent = Holder,
 	})
 
-	-- Number input box bên phải label
 	local NumBox = self:New("TextBox", {
 		Name = BaseName .. "NumBox",
 		BackgroundTransparency = 1,
@@ -1191,12 +1189,12 @@ function Library:CreateSlider(Container, Idx, Config)
 	local Track = self:New("Frame", {
 		Name = BaseName .. "Track",
 		BackgroundColor3 = "MainColor",
-		Position = UDim2.fromOffset(0, Compact and 20 or 32),
-		Size = UDim2.new(1, 0, 0, 10),
+		Position = UDim2.fromOffset(0, Compact and 20 or 20),
+		Size = UDim2.new(1, 0, 0, 14),
 		Parent = Holder,
 	})
 	self:New("UICorner", {
-		CornerRadius = UDim.new(1, 0),
+		CornerRadius = UDim.new(0, 4),
 		Parent = Track,
 	})
 
@@ -1207,9 +1205,21 @@ function Library:CreateSlider(Container, Idx, Config)
 		Parent = Track,
 	})
 	self:New("UICorner", {
-		CornerRadius = UDim.new(1, 0),
+		CornerRadius = UDim.new(0, 4),
 		Parent = Fill,
 	})
+
+	local Cursor = self:New("Frame", {
+		Name = BaseName .. "Cursor",
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale((Default - Min) / (Max - Min), 0.5),
+		Size = UDim2.fromOffset(4, 18),
+		ZIndex = 10,
+		Parent = Track,
+	})
+	self:New("UICorner", {CornerRadius = UDim.new(0, 2), Parent = Cursor})
+	self:New("UIStroke", {Color = Color3.new(0, 0, 0), Thickness = 1, Parent = Cursor})
 
 	local SliderObject = {
 		Name = BaseName,
@@ -1223,6 +1233,7 @@ function Library:CreateSlider(Container, Idx, Config)
 		Holder = Holder,
 		Track = Track,
 		Fill = Fill,
+		Cursor = Cursor,
 		Label = Label,
 		NumBox = NumBox,
 		Disabled = false,
@@ -1239,6 +1250,7 @@ function Library:CreateSlider(Container, Idx, Config)
 			self.Value = Value
 			local Scale = (Value - self.Min) / (self.Max - self.Min)
 			self.Fill.Size = UDim2.fromScale(Scale, 1)
+			self.Cursor.Position = UDim2.fromScale(Scale, 0.5)
 			self.NumBox.Text = tostring(Value) .. self.Suffix
 			if self.Callback then
 				self.Callback(Value)
@@ -1269,10 +1281,9 @@ function Library:CreateSlider(Container, Idx, Config)
 		end,
 	}
 
-	-- Drag logic
 	local Dragging = false
 	Track.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 and not SliderObject.Disabled then
+		if (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) and not SliderObject.Disabled then
 			Dragging = true
 			local Pos = math.clamp((Input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
 			local Value = Min + (Max - Min) * Pos
@@ -1280,19 +1291,18 @@ function Library:CreateSlider(Container, Idx, Config)
 		end
 	end)
 	Track.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Dragging = false
 		end
 	end)
 	UserInputService.InputChanged:Connect(function(Input)
-		if Dragging and Input.UserInputType == Enum.UserInputType.MouseMovement and not SliderObject.Disabled then
+		if Dragging and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) and not SliderObject.Disabled then
 			local Pos = math.clamp((Input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
 			local Value = Min + (Max - Min) * Pos
 			SliderObject:SetValue(Value)
 		end
 	end)
 
-	-- Number box input
 	NumBox.FocusLost:Connect(function()
 		if SliderObject.Disabled then return end
 		local Clean = NumBox.Text:gsub("[^%d%.%-]", "")
@@ -1522,6 +1532,7 @@ function Library:CreateDropdown(Container, Idx, Config)
 
 		Open = function(self)
 			self.IsOpen = true
+			self.Holder.ZIndex = 100
 			TweenService:Create(self.Arrow, TweenInfo.new(0.15), { Rotation = 180 }):Play()
 			self.DropdownFrame.Visible = true
 			self.DropdownFrame.CanvasSize = UDim2.new(0, 0, 0, OptionList.AbsoluteContentSize.Y + 8)
@@ -1529,6 +1540,7 @@ function Library:CreateDropdown(Container, Idx, Config)
 
 		Close = function(self)
 			self.IsOpen = false
+			self.Holder.ZIndex = 5
 			TweenService:Create(self.Arrow, TweenInfo.new(0.15), { Rotation = 0 }):Play()
 			self.DropdownFrame.Visible = false
 		end,
@@ -1986,7 +1998,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		BorderSizePixel = 0,
 		Size = UDim2.fromOffset(240, 320),
 		Visible = false,
-		ZIndex = 1,
+		ZIndex = 100,
 		Parent = self.ColorpickerFolder or self.ScreenGui or gethui(),
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 10), Parent = Popup})
@@ -1998,10 +2010,12 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		PaddingTop = UDim.new(0, 12),
 		Parent = Popup,
 	})
-	self:New("UIScale", {Scale = self.DPIScale or 1, Parent = Popup})
+	local ColorPickerScale = self:New("UIScale", {Scale = self.DPIScale or 1, Parent = Popup})
+	table.insert(self.Scales, ColorPickerScale)
 
 	local PopupList = self:New("UIListLayout", {
 		Padding = UDim.new(0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
 		Parent = Popup,
 	})
 
@@ -2010,7 +2024,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		BackgroundTransparency = 0.6,
 		BackgroundColor3 = "OutlineColor",
 		Size = UDim2.new(1, 0, 0, 6),
-		LayoutOrder = -100,
+		LayoutOrder = 1,
 		Active = true,
 		ZIndex = 250,
 		Parent = Popup,
@@ -2026,6 +2040,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Name = "SVHolder",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 100),
+		LayoutOrder = 2,
 		Parent = Popup,
 	})
 
@@ -2071,6 +2086,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Name = "HueFrame",
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		Size = UDim2.new(1, 0, 0, 14),
+		LayoutOrder = 3,
 		Parent = Popup,
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 4), Parent = HueFrame})
@@ -2106,6 +2122,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		TextSize = 12,
 		TextTransparency = 0.4,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		LayoutOrder = 4,
 		Parent = Popup,
 	})
 
@@ -2113,6 +2130,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Name = "OpacityFrame",
 		BackgroundColor3 = "MainColor",
 		Size = UDim2.new(1, 0, 0, 14),
+		LayoutOrder = 5,
 		Parent = Popup,
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 4), Parent = OpacityFrame})
@@ -2140,6 +2158,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Name = "BottomRow",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 32),
+		LayoutOrder = 6,
 		Parent = Popup,
 	})
 	self:New("UIListLayout", {
@@ -2178,6 +2197,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Name = "RGBRow",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 26),
+		LayoutOrder = 7,
 		Parent = Popup,
 	})
 	self:New("UIListLayout", {
@@ -2211,6 +2231,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		Name = "BtnRow",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 28),
+		LayoutOrder = 8,
 		Parent = Popup,
 	})
 	self:New("UIListLayout", {
@@ -2288,7 +2309,7 @@ function Library:CreateColorPicker(Container, Idx, Config)
 
 	local SVDragging = false
 	SVHolder.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			SVDragging = true
 			local ap = SVHolder.AbsolutePosition
 			local as = SVHolder.AbsoluteSize
@@ -2299,13 +2320,13 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		end
 	end)
 	SVHolder.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then SVDragging = false end
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then SVDragging = false end
 	end)
 
 	-- Hue dragging
 	local HueDragging = false
 	HueFrame.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			HueDragging = true
 			local ap = HueFrame.AbsolutePosition
 			local as = HueFrame.AbsoluteSize
@@ -2314,12 +2335,12 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		end
 	end)
 	HueFrame.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then HueDragging = false end
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then HueDragging = false end
 	end)
 
 	local OpacityDragging = false
 	OpacityFrame.InputBegan:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			OpacityDragging = true
 			local ap = OpacityFrame.AbsolutePosition
 			local as = OpacityFrame.AbsoluteSize
@@ -2328,11 +2349,11 @@ function Library:CreateColorPicker(Container, Idx, Config)
 		end
 	end)
 	OpacityFrame.InputEnded:Connect(function(Input)
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 then OpacityDragging = false end
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then OpacityDragging = false end
 	end)
 
 	UserInputService.InputChanged:Connect(function(Input)
-		if Input.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+		if Input.UserInputType ~= Enum.UserInputType.MouseMovement and Input.UserInputType ~= Enum.UserInputType.Touch then return end
 		if SVDragging then
 			local ap = SVHolder.AbsolutePosition
 			local as = SVHolder.AbsoluteSize
@@ -2481,6 +2502,7 @@ function Library:Window(info)
 		Name = "UziLibrary",
 		DisplayOrder = 998,
 		ResetOnSpawn = false,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 		Parent = gethui(),
 	})
 
@@ -2640,6 +2662,7 @@ function Library:Window(info)
 		Size = UDim2.new(0, SidebarWidth, 1, -49),
 		ScrollBarThickness = 0,
 		BackgroundTransparency = 1,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
 		Parent = MainFrame,
 	})
 	self:New("UIListLayout", {
@@ -2889,7 +2912,8 @@ function Library:Window(info)
 	})
 	self:New("UICorner", {CornerRadius = UDim.new(0, 16), Parent = ThemePopup})
 	self:New("UIStroke", {Color = "OutlineColor", Parent = ThemePopup})
-	self:New("UIScale", {Scale = self.DPIScale or 1, Parent = ThemePopup})
+	local ThemeScale = self:New("UIScale", {Scale = self.DPIScale or 1, Parent = ThemePopup})
+	table.insert(self.Scales, ThemeScale)
 
 	local ThemeTopBar = self:New("Frame", {
 		Name = "ThemeTopBar",
@@ -3052,6 +3076,62 @@ function Library:Window(info)
 				self.ScreenGui:Destroy()
 			end
 		end,
+
+		SetDPI = function(self, Scale)
+			Library.DPIScale = Scale
+			local ActiveScales = {}
+			for _, ScaleInstance in ipairs(Library.Scales) do
+				if ScaleInstance and ScaleInstance.Parent then
+					ScaleInstance.Scale = Scale
+					table.insert(ActiveScales, ScaleInstance)
+				end
+			end
+			Library.Scales = ActiveScales
+		end,
+
+		UIToggleButton = function(self, Config)
+			Config = Config or {}
+			local Icon = Config.Icon or "rbxassetid://101007429951147"
+			local Position = Config.Position or UDim2.new(0.05, 0, 0.1, 0)
+			local Size = Config.Size or UDim2.fromOffset(44, 44)
+
+			local ToggleBtnGui = Library:New("ImageButton", {
+				Name = "UIToggleButton",
+				BackgroundColor3 = Library.Scheme.MainColor,
+				Position = Position,
+				Size = Size,
+				Image = Icon,
+				ImageColor3 = Library.Scheme.FontColor,
+				Parent = self.ScreenGui,
+			})
+			Library:New("UICorner", {
+				CornerRadius = UDim.new(0, 8),
+				Parent = ToggleBtnGui,
+			})
+			Library:New("UIStroke", {
+				Color = "OutlineColor",
+				Parent = ToggleBtnGui,
+			})
+
+			Library:MakeDraggable(ToggleBtnGui, ToggleBtnGui)
+
+			ToggleBtnGui.MouseEnter:Connect(function()
+				TweenService:Create(ToggleBtnGui, TweenInfo.new(0.15), {
+					ImageTransparency = 0.2,
+				}):Play()
+			end)
+			ToggleBtnGui.MouseLeave:Connect(function()
+				TweenService:Create(ToggleBtnGui, TweenInfo.new(0.15), {
+					ImageTransparency = 0,
+				}):Play()
+			end)
+
+			ToggleBtnGui.MouseButton1Click:Connect(function()
+				self:Toggle()
+			end)
+
+			return ToggleBtnGui
+		end,
 	}
 
 	function WindowObject:ToggleThemeUi()
@@ -3202,7 +3282,17 @@ function Library:Notify(Config)
 	local Pos = Config.Pos or (Type == 1 and "right" or "top-center")
 	Pos = Pos:lower():gsub("%s+", "")
 
-	local Parent = self.ScreenGui or gethui()
+	if not self.NotificationFolder then
+		local folder = (self.ScreenGui and self.ScreenGui:FindFirstChild("Notification")) or Instance.new("Folder")
+		folder.Name = "Notification"
+		folder.Parent = self.ScreenGui or gethui()
+		self.NotificationFolder = folder
+	end
+
+	local Parent = self.NotificationFolder
+
+	local IsMobile = self.IsMobile or false
+	local NotifWidth = IsMobile and 250 or 320
 
 	if not self.NotifyContainers then
 		self.NotifyContainers = {}
@@ -3212,7 +3302,7 @@ function Library:Notify(Config)
 			F.BackgroundTransparency = 1
 			F.AnchorPoint = anchor
 			F.Position = pos
-			F.Size = UDim2.new(0, 320, 1, 0)
+			F.Size = UDim2.new(0, NotifWidth, 1, 0)
 			F.ZIndex = 1000
 			F.Parent = Parent
 			local L = Instance.new("UIListLayout")
@@ -3227,6 +3317,11 @@ function Library:Notify(Config)
 		self.NotifyContainers.Left = MakeContainer("LeftNotif", Vector2.new(0, 0), UDim2.new(0, 20, 0, 20), Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Top)
 		self.NotifyContainers.TopCenter = MakeContainer("TopCenterNotif", Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 20), Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Top)
 		self.NotifyContainers.BottomCenter = MakeContainer("BottomCenterNotif", Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, -20), Enum.FillDirection.Vertical, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Bottom)
+	else
+		-- Ensure container width stays updated if size constraints changed
+		for _, container in pairs(self.NotifyContainers) do
+			container.Size = UDim2.new(0, NotifWidth, 1, 0)
+		end
 	end
 
 	local Container
@@ -3242,7 +3337,7 @@ function Library:Notify(Config)
 		Container = self.NotifyContainers.Right
 	end
 
-	local Height = Type == 1 and 64 or 44
+	local Height = Type == 1 and (IsMobile and 54 or 64) or (IsMobile and 38 or 44)
 	local NotifyFrame = self:New("Frame", {
 		Name = "Notify",
 		BackgroundColor3 = "BackgroundColor",
@@ -3251,18 +3346,18 @@ function Library:Notify(Config)
 		ZIndex = 1001,
 		Parent = Container,
 	})
-	self:New("UICorner", {CornerRadius = UDim.new(0, 10), Parent = NotifyFrame})
+	self:New("UICorner", {CornerRadius = UDim.new(0, 8), Parent = NotifyFrame})
 	self:New("UIStroke", {Color = "OutlineColor", Parent = NotifyFrame})
 	self:New("UIPadding", {
-		PaddingLeft = UDim.new(0, 12),
-		PaddingRight = UDim.new(0, 12),
-		PaddingTop = UDim.new(0, 10),
-		PaddingBottom = UDim.new(0, 10),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 24), 
+		PaddingTop = UDim.new(0, 8),
+		PaddingBottom = UDim.new(0, 8),
 		Parent = NotifyFrame,
 	})
 
-	local IconSize = Type == 1 and 28 or 22
-	local IconOffset = Icon and (IconSize + 10) or 0
+	local IconSize = Type == 1 and (IsMobile and 22 or 28) or (IsMobile and 16 or 22)
+	local IconOffset = Icon and (IconSize + 8) or 0
 
 	if Icon then
 		local IconData = self:GetCustomIcon(Icon)
@@ -3274,20 +3369,23 @@ function Library:Notify(Config)
 			ImageColor3 = "FontColor",
 			BackgroundTransparency = 1,
 			Size = UDim2.fromOffset(IconSize, IconSize),
-			Position = UDim2.fromOffset(0, Type == 1 and 4 or 2),
+			Position = UDim2.fromOffset(0, Type == 1 and (IsMobile and 6 or 4) or (IsMobile and 3 or 2)),
 			ZIndex = 1002,
 			Parent = NotifyFrame,
 		})
 	end
+
+	local TitleSize = IsMobile and 12 or 14
+	local ContentSize = IsMobile and 10 or 12
 
 	if Type == 1 then
 		self:New("TextLabel", {
 			Name = "NotifyTitle",
 			BackgroundTransparency = 1,
 			Position = UDim2.fromOffset(IconOffset, 0),
-			Size = UDim2.new(1, -IconOffset, 0, 18),
+			Size = UDim2.new(1, -IconOffset, 0, IsMobile and 15 or 18),
 			Text = Title,
-			TextSize = 14,
+			TextSize = TitleSize,
 			TextColor3 = "FontColor",
 			TextXAlignment = Enum.TextXAlignment.Left,
 			RichText = RichText,
@@ -3297,10 +3395,10 @@ function Library:Notify(Config)
 		self:New("TextLabel", {
 			Name = "NotifyContent",
 			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(IconOffset, 20),
-			Size = UDim2.new(1, -IconOffset, 1, -20),
+			Position = UDim2.fromOffset(IconOffset, IsMobile and 16 or 20),
+			Size = UDim2.new(1, -IconOffset, 1, IsMobile and -16 or -20),
 			Text = Content,
-			TextSize = 12,
+			TextSize = ContentSize,
 			TextColor3 = "FontColor",
 			TextTransparency = 0.35,
 			TextXAlignment = Enum.TextXAlignment.Left,
@@ -3316,7 +3414,7 @@ function Library:Notify(Config)
 			Position = UDim2.fromOffset(IconOffset, 0),
 			Size = UDim2.new(1, -IconOffset, 1, 0),
 			Text = Content,
-			TextSize = 13,
+			TextSize = IsMobile and 11 or 13,
 			TextColor3 = "FontColor",
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextWrapped = true,
@@ -3325,6 +3423,45 @@ function Library:Notify(Config)
 			Parent = NotifyFrame,
 		})
 	end
+
+	local DismissBtn = self:New("ImageButton", {
+		Name = "DismissBtn",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, 16, 0.5, 0),
+		Size = UDim2.fromOffset(18, 18),
+
+		Image = "rbxassetid://116396312853810",
+		ImageColor3 = "FontColor",
+		ImageTransparency = 0.5,
+
+		AutoButtonColor = false,
+		ZIndex = 1003,
+		Parent = NotifyFrame,
+	})
+
+	local dismissed = false
+	local function Dismiss()
+		if dismissed then return end
+		dismissed = true
+		local T = TweenService:Create(NotifyFrame, TweenInfo.new(0.2), {BackgroundTransparency = 1})
+		T:Play()
+		for _, child in ipairs(NotifyFrame:GetDescendants()) do
+			if child:IsA("TextLabel") or child:IsA("TextButton") then
+				TweenService:Create(child, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+			end
+			if child:IsA("ImageLabel") or child:IsA("ImageButton") then
+				TweenService:Create(child, TweenInfo.new(0.2), {ImageTransparency = 1}):Play()
+			end
+			if child:IsA("Frame") and child ~= NotifyFrame then
+				TweenService:Create(child, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+			end
+		end
+		T.Completed:Wait()
+		NotifyFrame:Destroy()
+	end
+
+	DismissBtn.MouseButton1Click:Connect(Dismiss)
 
 	TweenService:Create(NotifyFrame, TweenInfo.new(0.25), {BackgroundTransparency = 0.05}):Play()
 	for _, child in ipairs(NotifyFrame:GetDescendants()) do
@@ -3336,21 +3473,9 @@ function Library:Notify(Config)
 	end
 
 	task.delay(Duration, function()
-		local T = TweenService:Create(NotifyFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1})
-		T:Play()
-		for _, child in ipairs(NotifyFrame:GetDescendants()) do
-			if child:IsA("TextLabel") or child:IsA("TextButton") then
-				TweenService:Create(child, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
-			end
-			if child:IsA("ImageLabel") or child:IsA("ImageButton") then
-				TweenService:Create(child, TweenInfo.new(0.3), {ImageTransparency = 1}):Play()
-			end
-			if child:IsA("Frame") and child ~= NotifyFrame then
-				TweenService:Create(child, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-			end
+		if not dismissed then
+			Dismiss()
 		end
-		T.Completed:Wait()
-		NotifyFrame:Destroy()
 	end)
 end
 
