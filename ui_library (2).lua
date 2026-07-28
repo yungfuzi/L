@@ -33,29 +33,43 @@ protectgui(ScreenGui)
 ScreenGui.Parent = gethui()
 Library.ScreenGui = ScreenGui
 
+-- Z-index tiers (all are top-level children of ScreenGui, so these
+-- values alone decide stacking regardless of creation order):
+--   Windows            = 1
+--   Overlay (popups)   = 30   (dropdown lists, color pickers)
+--   Notifications      = 60
+--   Dialogs (modal)    = 100
+local Overlay = Instance.new("Frame")
+Overlay.Name = "Overlay"
+Overlay.BackgroundTransparency = 1
+Overlay.Size = UDim2.fromScale(1, 1)
+Overlay.ZIndex = 30
+Overlay.Parent = ScreenGui
+Library.Overlay = Overlay
+
 -- Templates
 Library.Templates = {
     Window = { Title = "Obsidian", Size = UDim2.fromOffset(560, 420), Center = true, AutoShow = true },
-    Toggle = { Default = false, Risky = false, Callback = function() end },
-    Slider = { Default = 0, Min = 0, Max = 100, Rounding = 0, Prefix = "", Suffix = "", Callback = function() end },
-    Dropdown = { Default = nil, Multi = false, Search = false, Callback = function() end },
-    Input = { Default = "", Numeric = false, Finished = false, ClearTextOnFocus = false, Callback = function() end },
-    ColorPicker = { Default = Color3.fromRGB(255,255,255), Transparency = 0, Callback = function() end },
-    KeyPicker = { Default = "None", Mode = "Toggle", Callback = function() end, Modes = {"Always","Toggle","Hold","Press"} },
+    Toggle = { Default = false, Risky = false, Description = nil, Callback = function() end },
+    Slider = { Default = 0, Min = 0, Max = 100, Rounding = 0, Prefix = "", Suffix = "", Description = nil, Callback = function() end },
+    Dropdown = { Default = nil, Multi = false, Search = false, Description = nil, Callback = function() end },
+    Input = { Default = "", Numeric = false, Finished = false, ClearTextOnFocus = false, Description = nil, Callback = function() end },
+    ColorPicker = { Default = Color3.fromRGB(255,255,255), Transparency = 0, Description = nil, Callback = function() end },
+    KeyPicker = { Default = "None", Mode = "Toggle", Description = nil, Callback = function() end, Modes = {"Always","Toggle","Hold","Press"} },
     Notification = { Title = "Notification", Content = "", Duration = 5 },
     Dialog = { Title = "Dialog", Content = "", Buttons = {} },
 }
 
 -- Theme
 Library.Scheme = {
-    Background = Color3.fromRGB(28, 28, 28),
+    Background = Color3.fromRGB(14, 14, 14),
     Accent = Color3.fromRGB(105, 160, 240),
-    Outline = Color3.fromRGB(45, 45, 45),
-    Inline = Color3.fromRGB(38, 38, 38),
+    Outline = Color3.fromRGB(34, 34, 34),
+    Inline = Color3.fromRGB(22, 22, 22),
     FontColor = Color3.fromRGB(230, 230, 230),
-    DimmedFont = Color3.fromRGB(150, 150, 150),
+    DimmedFont = Color3.fromRGB(140, 140, 140),
     Risky = Color3.fromRGB(240, 100, 100),
-    GroupBackground = Color3.fromRGB(32, 32, 32),
+    GroupBackground = Color3.fromRGB(18, 18, 18),
 }
 
 Library.Registry = {}
@@ -107,6 +121,38 @@ local function GetTextSize(text, size, font)
     return TextService:GetTextSize(text, size, font, Vector2.new(9999, 9999))
 end
 
+-- Native UIShadow (engine class, wrapped in pcall for older executors/clients)
+local function AddShadow(parent, transparency, blur, offsetY)
+    local ok, shadow = pcall(function()
+        local Shadow = Instance.new("UIShadow")
+        Shadow.Color = Color3.new(0, 0, 0)
+        Shadow.Transparency = transparency or 0.55
+        Shadow.BlurRadius = UDim.new(0, blur or 14)
+        Shadow.Offset = UDim2.new(0, 0, 0, offsetY or 3)
+        Shadow.Parent = parent
+        return Shadow
+    end)
+    return ok and shadow or nil
+end
+
+-- Small dimmed caption placed under an element's main label
+local function AddDescription(parent, yOffset, text)
+    local Desc = Instance.new("TextLabel")
+    Desc.Size = UDim2.new(1, 0, 0, 14)
+    Desc.Position = UDim2.new(0, 0, 0, yOffset)
+    Desc.BackgroundTransparency = 1
+    Desc.Text = text
+    Desc.TextColor3 = Library.Scheme.DimmedFont
+    Desc.Font = Enum.Font.Gotham
+    Desc.TextSize = 11
+    Desc.TextWrapped = true
+    Desc.TextXAlignment = Enum.TextXAlignment.Left
+    Desc.TextYAlignment = Enum.TextYAlignment.Top
+    Desc.Parent = parent
+    AddToRegistry(Desc, {TextColor3 = "DimmedFont"})
+    return Desc
+end
+
 -- Icons
 Library.Icons = {
     ["loader"] = "rbxassetid://10709782600",
@@ -126,6 +172,7 @@ do
     NotifContainer.Size = UDim2.new(0, 260, 1, -20)
     NotifContainer.Position = UDim2.new(1, -270, 0, 10)
     NotifContainer.BackgroundTransparency = 1
+    NotifContainer.ZIndex = 60
     NotifContainer.Parent = ScreenGui
     
     local NotifList = Instance.new("UIListLayout")
@@ -142,6 +189,7 @@ do
         Frame.BorderSizePixel = 0
         Frame.Parent = NotifContainer
         AddToRegistry(Frame, {BackgroundColor3 = "Background"})
+        AddShadow(Frame, 0.5, 10)
         
         local Stroke = Instance.new("UIStroke")
         Stroke.Color = self.Scheme.Outline
@@ -150,7 +198,7 @@ do
         AddToRegistry(Stroke, {Color = "Outline"})
         
         local Corner = Instance.new("UICorner")
-        Corner.CornerRadius = UDim.new(0, 4)
+        Corner.CornerRadius = UDim.new(0, 0)
         Corner.Parent = Frame
         
         local Title = Instance.new("TextLabel")
@@ -204,7 +252,7 @@ function Library:ShowLoading(text)
     AddToRegistry(Frame, {BackgroundColor3 = "Background"})
     
     local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 6)
+    Corner.CornerRadius = UDim.new(0, 0)
     Corner.Parent = Frame
     
     local Stroke = Instance.new("UIStroke")
@@ -231,12 +279,12 @@ end
 function Library:CreateDialog(info)
     info = setmetatable(info or {}, {__index = self.Templates.Dialog})
     
-    local Overlay = Instance.new("Frame")
-    Overlay.Size = UDim2.fromScale(1, 1)
-    Overlay.BackgroundColor3 = Color3.new(0,0,0)
-    Overlay.BackgroundTransparency = 0.5
-    Overlay.ZIndex = 100
-    Overlay.Parent = ScreenGui
+    local DialogLayer = Instance.new("Frame")
+    DialogLayer.Size = UDim2.fromScale(1, 1)
+    DialogLayer.BackgroundColor3 = Color3.new(0,0,0)
+    DialogLayer.BackgroundTransparency = 0.5
+    DialogLayer.ZIndex = 100
+    DialogLayer.Parent = ScreenGui
     
     local Frame = Instance.new("Frame")
     Frame.Size = UDim2.fromOffset(300, 160)
@@ -245,11 +293,12 @@ function Library:CreateDialog(info)
     Frame.BackgroundColor3 = self.Scheme.Background
     Frame.BorderSizePixel = 0
     Frame.ZIndex = 101
-    Frame.Parent = Overlay
+    Frame.Parent = DialogLayer
     AddToRegistry(Frame, {BackgroundColor3 = "Background"})
+    AddShadow(Frame, 0.45, 16)
     
     local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 6)
+    Corner.CornerRadius = UDim.new(0, 0)
     Corner.Parent = Frame
     
     local Stroke = Instance.new("UIStroke")
@@ -309,7 +358,7 @@ function Library:CreateDialog(info)
         AddToRegistry(Btn, {BackgroundColor3 = "Inline", TextColor3 = "FontColor"})
         
         local BtnCorner = Instance.new("UICorner")
-        BtnCorner.CornerRadius = UDim.new(0, 4)
+        BtnCorner.CornerRadius = UDim.new(0, 0)
         BtnCorner.Parent = Btn
         
         Connect(Btn, Btn.MouseEnter, function()
@@ -320,11 +369,11 @@ function Library:CreateDialog(info)
         end)
         Connect(Btn, Btn.MouseButton1Click, function()
             if btnInfo.Callback then btnInfo.Callback() end
-            Overlay:Destroy()
+            DialogLayer:Destroy()
         end)
     end
     
-    return Overlay
+    return DialogLayer
 end
 
 -- Groupbox factory
@@ -335,8 +384,10 @@ local function CreateGroupbox(Tab, Parent, info)
     Frame.Size = UDim2.new(1, 0, 0, 40)
     Frame.BackgroundColor3 = Library.Scheme.GroupBackground
     Frame.BorderSizePixel = 0
+    Frame.ClipsDescendants = true
     Frame.Parent = Parent
     AddToRegistry(Frame, {BackgroundColor3 = "GroupBackground"})
+    AddShadow(Frame, 0.65, 6)
     
     local Stroke = Instance.new("UIStroke")
     Stroke.Color = Library.Scheme.Outline
@@ -345,7 +396,7 @@ local function CreateGroupbox(Tab, Parent, info)
     AddToRegistry(Stroke, {Color = "Outline"})
     
     local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 4)
+    Corner.CornerRadius = UDim.new(0, 0)
     Corner.Parent = Frame
     
     local Label = Instance.new("TextLabel")
@@ -410,21 +461,24 @@ local function CreateGroupbox(Tab, Parent, info)
         info = setmetatable(info or {}, {__index = Library.Templates.Toggle})
         local Toggle = {Value = info.Default, Connections = {}, Type = "Toggle"}
         
+        local rowHeight = 20
+        local totalHeight = info.Description and (rowHeight + 14) or rowHeight
+        
         local Holder = Instance.new("Frame")
-        Holder.Size = UDim2.new(1, 0, 0, 20)
+        Holder.Size = UDim2.new(1, 0, 0, totalHeight)
         Holder.BackgroundTransparency = 1
         Holder.Parent = Container
         
         local Box = Instance.new("Frame")
         Box.Size = UDim2.fromOffset(16, 16)
-        Box.Position = UDim2.new(0, 0, 0.5, -8)
+        Box.Position = UDim2.new(0, 0, 0, rowHeight / 2 - 8)
         Box.BackgroundColor3 = Library.Scheme.Inline
         Box.BorderSizePixel = 0
         Box.Parent = Holder
         AddToRegistry(Box, {BackgroundColor3 = "Inline"})
         
         local BoxCorner = Instance.new("UICorner")
-        BoxCorner.CornerRadius = UDim.new(0, 3)
+        BoxCorner.CornerRadius = UDim.new(0, 0)
         BoxCorner.Parent = Box
         
         local BoxStroke = Instance.new("UIStroke")
@@ -443,11 +497,11 @@ local function CreateGroupbox(Tab, Parent, info)
         AddToRegistry(Check, {BackgroundColor3 = "Accent"})
         
         local CheckCorner = Instance.new("UICorner")
-        CheckCorner.CornerRadius = UDim.new(0, 2)
+        CheckCorner.CornerRadius = UDim.new(0, 0)
         CheckCorner.Parent = Check
         
         local Text = Instance.new("TextLabel")
-        Text.Size = UDim2.new(1, -24, 1, 0)
+        Text.Size = UDim2.new(1, -24, 0, rowHeight)
         Text.Position = UDim2.new(0, 22, 0, 0)
         Text.BackgroundTransparency = 1
         Text.Text = info.Text or "Toggle"
@@ -459,8 +513,12 @@ local function CreateGroupbox(Tab, Parent, info)
         if info.Risky then AddToRegistry(Text, {TextColor3 = "Risky"})
         else AddToRegistry(Text, {TextColor3 = "FontColor"}) end
         
+        if info.Description then
+            AddDescription(Holder, rowHeight, info.Description)
+        end
+        
         local Click = Instance.new("TextButton")
-        Click.Size = UDim2.fromScale(1, 1)
+        Click.Size = UDim2.new(1, 0, 0, rowHeight)
         Click.BackgroundTransparency = 1
         Click.Text = ""
         Click.Parent = Holder
@@ -487,16 +545,19 @@ local function CreateGroupbox(Tab, Parent, info)
     
     -- Button
     function Groupbox:AddButton(info)
-        info = setmetatable(info or {}, {__index = {Text = "Button", Callback = function() end}})
+        info = setmetatable(info or {}, {__index = {Text = "Button", Description = nil, Callback = function() end}})
         local Button = {Connections = {}, Type = "Button"}
         
+        local rowHeight = 26
+        local totalHeight = info.Description and (rowHeight + 14) or rowHeight
+        
         local Holder = Instance.new("Frame")
-        Holder.Size = UDim2.new(1, 0, 0, 26)
+        Holder.Size = UDim2.new(1, 0, 0, totalHeight)
         Holder.BackgroundTransparency = 1
         Holder.Parent = Container
         
         local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1, 0, 1, 0)
+        Btn.Size = UDim2.new(1, 0, 0, rowHeight)
         Btn.BackgroundColor3 = Library.Scheme.Inline
         Btn.Text = info.Text
         Btn.TextColor3 = Library.Scheme.FontColor
@@ -507,7 +568,7 @@ local function CreateGroupbox(Tab, Parent, info)
         AddToRegistry(Btn, {BackgroundColor3 = "Inline", TextColor3 = "FontColor"})
         
         local BtnCorner = Instance.new("UICorner")
-        BtnCorner.CornerRadius = UDim.new(0, 4)
+        BtnCorner.CornerRadius = UDim.new(0, 0)
         BtnCorner.Parent = Btn
         
         local BtnStroke = Instance.new("UIStroke")
@@ -526,6 +587,10 @@ local function CreateGroupbox(Tab, Parent, info)
             if info.Callback then info.Callback() end
         end)
         
+        if info.Description then
+            AddDescription(Holder, rowHeight, info.Description)
+        end
+        
         Button.Holder = Holder
         table.insert(Groupbox.Elements, Button)
         table.insert(Tab.Elements, Button)
@@ -537,8 +602,10 @@ local function CreateGroupbox(Tab, Parent, info)
         info = setmetatable(info or {}, {__index = Library.Templates.Slider})
         local Slider = {Value = info.Default, Connections = {}, Type = "Slider"}
         
+        local descOffset = info.Description and 14 or 0
+        
         local Holder = Instance.new("Frame")
-        Holder.Size = UDim2.new(1, 0, 0, 36)
+        Holder.Size = UDim2.new(1, 0, 0, 36 + descOffset)
         Holder.BackgroundTransparency = 1
         Holder.Parent = Container
         
@@ -565,16 +632,20 @@ local function CreateGroupbox(Tab, Parent, info)
         ValueLabel.Parent = Holder
         AddToRegistry(ValueLabel, {TextColor3 = "DimmedFont"})
         
+        if info.Description then
+            AddDescription(Holder, 16, info.Description)
+        end
+        
         local Track = Instance.new("Frame")
         Track.Size = UDim2.new(1, 0, 0, 6)
-        Track.Position = UDim2.new(0, 0, 0, 22)
+        Track.Position = UDim2.new(0, 0, 0, 22 + descOffset)
         Track.BackgroundColor3 = Library.Scheme.Inline
         Track.BorderSizePixel = 0
         Track.Parent = Holder
         AddToRegistry(Track, {BackgroundColor3 = "Inline"})
         
         local TrackCorner = Instance.new("UICorner")
-        TrackCorner.CornerRadius = UDim.new(0, 3)
+        TrackCorner.CornerRadius = UDim.new(0, 0)
         TrackCorner.Parent = Track
         
         local Fill = Instance.new("Frame")
@@ -585,7 +656,7 @@ local function CreateGroupbox(Tab, Parent, info)
         AddToRegistry(Fill, {BackgroundColor3 = "Accent"})
         
         local FillCorner = Instance.new("UICorner")
-        FillCorner.CornerRadius = UDim.new(0, 3)
+        FillCorner.CornerRadius = UDim.new(0, 0)
         FillCorner.Parent = Fill
         
         local function Update(input)
@@ -645,13 +716,16 @@ local function CreateGroupbox(Tab, Parent, info)
         info = setmetatable(info or {}, {__index = Library.Templates.Dropdown})
         local Dropdown = {Value = info.Multi and {} or (info.Default or nil), Connections = {}, Type = "Dropdown", Options = info.Values or {}}
         
+        local rowHeight = 26
+        local descOffset = info.Description and 14 or 0
+        
         local Holder = Instance.new("Frame")
-        Holder.Size = UDim2.new(1, 0, 0, 26)
+        Holder.Size = UDim2.new(1, 0, 0, rowHeight + descOffset)
         Holder.BackgroundTransparency = 1
         Holder.Parent = Container
         
         local Btn = Instance.new("TextButton")
-        Btn.Size = UDim2.new(1, 0, 1, 0)
+        Btn.Size = UDim2.new(1, 0, 0, rowHeight)
         Btn.BackgroundColor3 = Library.Scheme.Inline
         Btn.Text = ""
         Btn.AutoButtonColor = false
@@ -659,7 +733,7 @@ local function CreateGroupbox(Tab, Parent, info)
         AddToRegistry(Btn, {BackgroundColor3 = "Inline"})
         
         local BtnCorner = Instance.new("UICorner")
-        BtnCorner.CornerRadius = UDim.new(0, 4)
+        BtnCorner.CornerRadius = UDim.new(0, 0)
         BtnCorner.Parent = Btn
         
         local BtnStroke = Instance.new("UIStroke")
@@ -689,19 +763,26 @@ local function CreateGroupbox(Tab, Parent, info)
         Icon.Parent = Btn
         AddToRegistry(Icon, {ImageColor3 = "DimmedFont"})
         
+        if info.Description then
+            AddDescription(Holder, rowHeight, info.Description)
+        end
+        
+        -- Popup list lives in the Overlay layer (not nested under Btn) so its
+        -- ZIndex always wins against other windows/groupboxes, regardless of
+        -- how deep the dropdown itself is nested.
         local ListFrame = Instance.new("Frame")
-        ListFrame.Size = UDim2.new(1, 0, 0, 0)
-        ListFrame.Position = UDim2.new(0, 0, 1, 4)
+        ListFrame.Size = UDim2.new(0, 0, 0, 0)
         ListFrame.BackgroundColor3 = Library.Scheme.Background
         ListFrame.BorderSizePixel = 0
         ListFrame.ClipsDescendants = true
         ListFrame.Visible = false
-        ListFrame.ZIndex = 10
-        ListFrame.Parent = Btn
+        ListFrame.ZIndex = 2
+        ListFrame.Parent = Library.Overlay
         AddToRegistry(ListFrame, {BackgroundColor3 = "Background"})
+        AddShadow(ListFrame, 0.5, 10)
         
         local ListCorner = Instance.new("UICorner")
-        ListCorner.CornerRadius = UDim.new(0, 4)
+        ListCorner.CornerRadius = UDim.new(0, 0)
         ListCorner.Parent = ListFrame
         
         local ListStroke = Instance.new("UIStroke")
@@ -709,6 +790,13 @@ local function CreateGroupbox(Tab, Parent, info)
         ListStroke.Thickness = 1
         ListStroke.Parent = ListFrame
         AddToRegistry(ListStroke, {Color = "Outline"})
+        
+        local function RepositionList()
+            ListFrame.Position = UDim2.fromOffset(Btn.AbsolutePosition.X, Btn.AbsolutePosition.Y + Btn.AbsoluteSize.Y + 4)
+        end
+        Connect(Dropdown, Btn:GetPropertyChangedSignal("AbsolutePosition"), RepositionList)
+        Connect(Dropdown, Btn:GetPropertyChangedSignal("AbsoluteSize"), RepositionList)
+        RepositionList()
         
         local Scroll = Instance.new("ScrollingFrame")
         Scroll.Size = UDim2.new(1, -8, 1, -8)
@@ -741,7 +829,7 @@ local function CreateGroupbox(Tab, Parent, info)
             AddToRegistry(SearchBox, {BackgroundColor3 = "Inline", TextColor3 = "FontColor"})
             
             local SearchCorner = Instance.new("UICorner")
-            SearchCorner.CornerRadius = UDim.new(0, 3)
+            SearchCorner.CornerRadius = UDim.new(0, 0)
             SearchCorner.Parent = SearchBox
             
             Scroll.Position = UDim2.new(0, 4, 0, 30)
@@ -791,7 +879,7 @@ local function CreateGroupbox(Tab, Parent, info)
                         else
                             Dropdown.Value = val
                             open = false
-                            Tween(ListFrame, TweenInfo.new(0.2), {Size = UDim2.new(1, 0, 0, 0)})
+                            Tween(ListFrame, TweenInfo.new(0.2), {Size = UDim2.new(0, Btn.AbsoluteSize.X, 0, 0)})
                             ListFrame.Visible = false
                             Icon.Rotation = 0
                         end
@@ -808,11 +896,13 @@ local function CreateGroupbox(Tab, Parent, info)
             open = not open
             if open then
                 Build()
+                RepositionList()
+                ListFrame.Size = UDim2.new(0, Btn.AbsoluteSize.X, 0, 0)
                 ListFrame.Visible = true
-                Tween(ListFrame, TweenInfo.new(0.2), {Size = UDim2.new(1, 0, 0, math.min(150, ScrollList.AbsoluteContentSize.Y + (SearchBox and 34 or 8)))})
+                Tween(ListFrame, TweenInfo.new(0.2), {Size = UDim2.new(0, Btn.AbsoluteSize.X, 0, math.min(150, ScrollList.AbsoluteContentSize.Y + (SearchBox and 34 or 8)))})
                 Icon.Rotation = 180
             else
-                Tween(ListFrame, TweenInfo.new(0.2), {Size = UDim2.new(1, 0, 0, 0)})
+                Tween(ListFrame, TweenInfo.new(0.2), {Size = UDim2.new(0, Btn.AbsoluteSize.X, 0, 0)})
                 task.wait(0.2)
                 ListFrame.Visible = false
                 Icon.Rotation = 0
@@ -834,6 +924,11 @@ local function CreateGroupbox(Tab, Parent, info)
             self.Value = val
             if info.Callback then info.Callback(val) end
         end
+        function Dropdown:Destroy()
+            for _,c in ipairs(self.Connections) do c:Disconnect() end
+            ListFrame:Destroy()
+            Holder:Destroy()
+        end
         
         Dropdown.Holder = Holder
         table.insert(Groupbox.Elements, Dropdown)
@@ -846,8 +941,10 @@ local function CreateGroupbox(Tab, Parent, info)
         info = setmetatable(info or {}, {__index = Library.Templates.Input})
         local Input = {Value = info.Default, Connections = {}, Type = "Input"}
         
+        local descOffset = info.Description and 14 or 0
+        
         local Holder = Instance.new("Frame")
-        Holder.Size = UDim2.new(1, 0, 0, 44)
+        Holder.Size = UDim2.new(1, 0, 0, 44 + descOffset)
         Holder.BackgroundTransparency = 1
         Holder.Parent = Container
         
@@ -862,9 +959,13 @@ local function CreateGroupbox(Tab, Parent, info)
         Label.Parent = Holder
         AddToRegistry(Label, {TextColor3 = "FontColor"})
         
+        if info.Description then
+            AddDescription(Holder, 16, info.Description)
+        end
+        
         local Box = Instance.new("TextBox")
         Box.Size = UDim2.new(1, 0, 0, 24)
-        Box.Position = UDim2.new(0, 0, 0, 18)
+        Box.Position = UDim2.new(0, 0, 0, 18 + descOffset)
         Box.BackgroundColor3 = Library.Scheme.Inline
         Box.Text = tostring(info.Default)
         Box.PlaceholderText = info.Placeholder or ""
@@ -876,7 +977,7 @@ local function CreateGroupbox(Tab, Parent, info)
         AddToRegistry(Box, {BackgroundColor3 = "Inline", TextColor3 = "FontColor"})
         
         local BoxCorner = Instance.new("UICorner")
-        BoxCorner.CornerRadius = UDim.new(0, 4)
+        BoxCorner.CornerRadius = UDim.new(0, 0)
         BoxCorner.Parent = Box
         
         local BoxStroke = Instance.new("UIStroke")
@@ -983,7 +1084,7 @@ local function CreateGroupbox(Tab, Parent, info)
         Swatch.Parent = Holder
         
         local SwatchCorner = Instance.new("UICorner")
-        SwatchCorner.CornerRadius = UDim.new(0, 4)
+        SwatchCorner.CornerRadius = UDim.new(0, 0)
         SwatchCorner.Parent = Swatch
         
         local SwatchStroke = Instance.new("UIStroke")
@@ -1003,7 +1104,7 @@ local function CreateGroupbox(Tab, Parent, info)
         AddToRegistry(Popup, {BackgroundColor3 = "Background"})
         
         local PopupCorner = Instance.new("UICorner")
-        PopupCorner.CornerRadius = UDim.new(0, 6)
+        PopupCorner.CornerRadius = UDim.new(0, 0)
         PopupCorner.Parent = Popup
         
         local PopupStroke = Instance.new("UIStroke")
@@ -1020,7 +1121,7 @@ local function CreateGroupbox(Tab, Parent, info)
         SatVal.Parent = Popup
         
         local SatValCorner = Instance.new("UICorner")
-        SatValCorner.CornerRadius = UDim.new(0, 4)
+        SatValCorner.CornerRadius = UDim.new(0, 0)
         SatValCorner.Parent = SatVal
         
         local h, s, v = Color3.toHSV(Picker.Value)
@@ -1047,7 +1148,7 @@ local function CreateGroupbox(Tab, Parent, info)
         HueSlider.Parent = Popup
         
         local HueCorner = Instance.new("UICorner")
-        HueCorner.CornerRadius = UDim.new(0, 4)
+        HueCorner.CornerRadius = UDim.new(0, 0)
         HueCorner.Parent = HueSlider
         
         local HueCursor = Instance.new("Frame")
@@ -1152,7 +1253,7 @@ local function CreateGroupbox(Tab, Parent, info)
         AddToRegistry(KeyBtn, {BackgroundColor3 = "Inline", TextColor3 = "FontColor"})
         
         local KeyCorner = Instance.new("UICorner")
-        KeyCorner.CornerRadius = UDim.new(0, 4)
+        KeyCorner.CornerRadius = UDim.new(0, 0)
         KeyCorner.Parent = KeyBtn
         
         local listening = false
@@ -1244,10 +1345,11 @@ function Library:CreateWindow(info)
     Main.Visible = info.AutoShow
     Main.Parent = ScreenGui
     AddToRegistry(Main, {BackgroundColor3 = "Background"})
+    AddShadow(Main, 0.4, 20)
     Window.Main = Main
     
     local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = UDim.new(0, 6)
+    MainCorner.CornerRadius = UDim.new(0, 0)
     MainCorner.Parent = Main
     
     local MainStroke = Instance.new("UIStroke")
@@ -1367,7 +1469,7 @@ function Library:CreateWindow(info)
         AddToRegistry(TabButton, {BackgroundColor3 = "Inline", TextColor3 = "FontColor"})
         
         local TabCorner = Instance.new("UICorner")
-        TabCorner.CornerRadius = UDim.new(0, 4)
+        TabCorner.CornerRadius = UDim.new(0, 0)
         TabCorner.Parent = TabButton
         
         local Tab = CreateTab(self, TabButton, Content, {})
@@ -1430,16 +1532,16 @@ end
 
 -- Config save/load
 function Library:SaveConfig(name)
-    if not isfolder("ObsidianConfigs") then makefolder("ObsidianConfigs") end
+    if not isfolder("Tze") then makefolder("Tze") end
     local data = {}
     for inst, elem in pairs(self.Registry) do
         -- placeholder for future per-element config serialization
     end
-    writefile("ObsidianConfigs/" .. name .. ".json", HttpService:JSONEncode(data))
+    writefile("Tze/" .. name .. ".json", HttpService:JSONEncode(data))
 end
 
 function Library:LoadConfig(name)
-    local path = "ObsidianConfigs/" .. name .. ".json"
+    local path = "Tze/" .. name .. ".json"
     if not isfile(path) then return false end
     local ok, data = pcall(HttpService.JSONDecode, HttpService, readfile(path))
     if not ok then return false end
