@@ -1,14 +1,6 @@
 local Library = {}
 getgenv().Library = Library
 
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
-local TextService = game:GetService("TextService")
-local CoreGui = game:GetService("CoreGui")
-
 local cloneref = cloneref or function(o) return o end
 local gethui = gethui or function() return CoreGui end
 local protectgui = protectgui or function() end
@@ -18,6 +10,14 @@ local makefolder = makefolder or function() end
 local writefile = writefile or function() end
 local readfile = readfile or function() end
 local isfile = isfile or function() return false end
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local TextService = game:GetService("TextService")
+local CoreGui = game:GetService("CoreGui")
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = HttpService:GenerateGUID(false)
