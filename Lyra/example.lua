@@ -1,4 +1,4 @@
-local Library = loadstring(game:HttpGet("YOUR_LIBRARY_URL"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/yungfuzi/L/refs/heads/main/Lyra/Library.lua"))()
 
 Library.Scheme.Accent = Color3.fromRGB(130, 180, 255)
 Library.Scheme.Background = Color3.fromRGB(12, 12, 14)
