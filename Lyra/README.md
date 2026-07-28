@@ -19,7 +19,7 @@ A clean, dark Roblox UI library with sharp outer frames, rounded groupboxes, and
 ## Load
 
 ```lua
-local Library = loadstring(game:HttpGet("YOUR_LIBRARY_URL"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/yungfuzi/L/refs/heads/main/Lyra/Library.lua"))()
 ```
 
 ## Quick Start
