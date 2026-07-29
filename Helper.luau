@@ -268,7 +268,7 @@ function Helper:Tween(target: CFrame | Vector3, options: {Speed: number?, TPDist
 			linearVelocity.VectorVelocity = Vector3.zero
 			root.AssemblyLinearVelocity = Vector3.zero
 			if angles then
-				root.CFrame = CFrame.new(targetPos) * angles
+				root.CFrame = targetCF * angles
 			else
 				root.CFrame = targetCF
 			end
