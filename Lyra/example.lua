@@ -8,16 +8,43 @@ Library.ToggleKey = Enum.KeyCode.RightShift
 
 local Window = Library:CreateWindow({
     Title = "Lyra",
+    Icon = "home",
     Size = UDim2.fromOffset(580, 440),
     Center = true,
+    LockResize = false,
     AutoShow = true,
+})
+
+Window:AddLinkButton({
+    Text = "Discord",
+    Icon = "link",
+    Callback = function()
+        setclipboard("https://discord.gg/...")
+    end,
+})
+
+Window:AddLinkButton({
+    Text = "don",
+    Icon = "link",
+    Callback = function()
+        setclipboard("https://discord.gg/...")
+    end,
+})
+
+Window:AddToggleUi({
+    Text = "UI",
+    Icon = "menu",              -- optional
+    OnlyShowMobile = true,      -- false = show on PC too
+    Size = UDim2.fromOffset(44, 44),
+    Position = UDim2.new(0, 10, 0, 100),
+    Callback = function(visible) end,
 })
 
 local MainTab = Window:AddTab("Main")
 local VisualsTab = Window:AddTab("Visuals")
 local MiscTab = Window:AddTab("Misc")
 
-local Combat = MainTab:AddLeftGroupbox({ Name = "Combat" })
+local Combat = MainTab:AddLeftGroupbox({ Name = "Combat" , Collapsible = true })
 
 local AimbotToggle = Combat:AddToggle({
     Text = "Aimbot",
@@ -41,7 +68,7 @@ AimbotLink:AddInput({ Text = "Custom FOV", Default = "90", Numeric = true, Callb
 AimbotLink:AddLabel("Advanced options")
 
 Combat:AddToggle({ Text = "Silent Aim", Default = false, Risky = true, Description = "Server-side aim correction", Callback = function(v) print("Silent Aim:", v) end }, "SilentAim")
-Combat:AddSlider({ Text = "FOV", Default = 90, Min = 30, Max = 180, Rounding = 0, Suffix = "Â°", Description = "Field of view of the aimbot", Callback = function(v) print("FOV:", v) end }, "FOV")
+Combat:AddSlider({ Text = "FOV", Default = 90, Min = 30, Max = 180, Rounding = 0, Suffix = "°", Description = "Field of view of the aimbot", Callback = function(v) print("FOV:", v) end }, "FOV")
 Combat:AddSlider({ Text = "Smoothness", Default = 0.25, Min = 0, Max = 1, Rounding = 2, Description = "Lower is snappier", Callback = function(v) end }, "Smoothness")
 Combat:AddDropdown({ Text = "Target Part", Values = {"Head", "Torso", "HumanoidRootPart", "UpperTorso"}, Default = "Head", Description = "Body part to lock onto", Callback = function(v) print("Target part:", v) end }, "TargetPart")
 Combat:AddDropdown({ Text = "Players", SpecialType = "Player", Multi = true, Search = true, Description = "Select targets from the server", Callback = function(selected) print("Selected players:", selected) end }, "Players")
@@ -132,9 +159,15 @@ DepBox:Setup(function() return AimbotToggle.Value end)
 DepBox:AddSlider({ Text = "Aimbot Range", Default = 150, Min = 50, Max = 500, Description = "Only visible when aimbot is enabled", Callback = function(v) end }, "AimbotRange")
 DepBox:AddToggle({ Text = "Team Check", Default = true, Description = "Ignore teammates", Callback = function(v) end }, "TeamCheck")
 
-local Config = MiscTab:AddRightGroupbox({ Name = "Config" })
+local Config = MiscTab:AddRightGroupbox({ Name = "Config" , Collapsible = true })
 Config:AddInput({ Text = "Config Name", Default = "default", Description = "Name of the config file", Callback = function(t) end }, "ConfigName")
 Config:AddButton({ Text = "Save Config", Description = "Save current settings", Callback = function() Library:SaveConfig("default") Library:Notify({ Title = "Config", Content = "Saved successfully", Duration = 3 }) end })
 Config:AddButton({ Text = "Load Config", Description = "Load saved settings", Callback = function() local data = Library:LoadConfig("default") if data then Library:Notify({ Title = "Config", Content = "Loaded successfully", Duration = 3 }) else Library:Notify({ Title = "Config", Content = "No config found", Duration = 3 }) end end })
 Config:AddLabel({ Text = "Lyra UI Library", Description = "v1.0 â€” full feature demo" })
 Config:AddKeyPicker({ Text = "Menu Key", Default = "RightShift", Mode = "Toggle", Description = "Toggle UI visibility", Callback = function(v) Window:Toggle() end }, "MenuKey")
+Config:AddDivider()           -- plain line
+Config:AddDivider("Combat")   -- line with label
+
+Library:SetTheme("Violet")     -- Default, Dark, Rose, Mint, Amber, Violet
+
+MiscTab:AddThemeGroupBox("left")    -- or "right" / "single"
