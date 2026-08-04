@@ -2338,27 +2338,7 @@ function Library:CreateWindow(info)
             Parent = columnsFrame,
         })
 
-        local function isStacked()
-            if Library.IsMobile and Window.StackColumnsOnMobile then
-                return true
-            end
-            -- also stack when window is narrow
-            return main.AbsoluteSize.X < 560
-        end
-
-        local function applyColumnLayout()
-            local stacked = isStacked()
-            columnsLayout.FillDirection = stacked and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal
-            if stacked then
-                leftColFrame.Size = UDim2.new(1, 0, 0, 0)
-                rightColFrame.Size = UDim2.new(1, 0, 0, 0)
-            else
-                leftColFrame.Size = UDim2.new(0.5, -5, 0, 0)
-                rightColFrame.Size = UDim2.new(0.5, -5, 0, 0)
-            end
-        end
-
-        -- Left column
+        -- Left column (create frames BEFORE layout function references them)
         local leftColFrame = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(0.5, -5, 0, 0),
@@ -2385,6 +2365,28 @@ function Library:CreateWindow(info)
             SortOrder = Enum.SortOrder.LayoutOrder,
             Parent = rightColFrame,
         })
+
+        local function isStacked()
+            if Library.IsMobile and Window.StackColumnsOnMobile then
+                return true
+            end
+            return main.AbsoluteSize.X < 560
+        end
+
+        local function applyColumnLayout()
+            if not leftColFrame or not rightColFrame then
+                return
+            end
+            local stacked = isStacked()
+            columnsLayout.FillDirection = stacked and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal
+            if stacked then
+                leftColFrame.Size = UDim2.new(1, 0, 0, 0)
+                rightColFrame.Size = UDim2.new(1, 0, 0, 0)
+            else
+                leftColFrame.Size = UDim2.new(0.5, -5, 0, 0)
+                rightColFrame.Size = UDim2.new(0.5, -5, 0, 0)
+            end
+        end
 
         local leftColumn = setmetatable({
             Container = leftColFrame,
