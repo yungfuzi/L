@@ -1,39 +1,19 @@
-# Aether
+# Ignite
 
 Modern Roblox Luau UI library with a dual-column layout, smooth animations, theme system, and a clean method-based API.
-
-**Highlights**
-- One shared `ScrollingFrame` per tab (left + right columns scroll together)
-- Full-width groupboxes, nested sections, headerless variants
-- Toggle variants: Switch / Checkbox / Button
-- Element **Link** panels (Popup / Side)
-- Dynamic Island style hide + floating toggle button
-- Live theme registry, search, notifications, keybind unload
 
 ---
 
 ## Load
 
 ```lua
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/USERNAME/Aether/main/Aether.lua"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/yungfuzi/L/refs/heads/main/Ignite/Library.lua"))()
 ```
-
-Replace `USERNAME` with your GitHub username / org.
-
-Local / Studio:
-
-```lua
-local Library = require(path.to.Aether) -- if converted to ModuleScript
--- or
-loadstring(readfile("Aether.lua"))()
-```
-
----
 
 ## Quick start
 
 ```lua
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/USERNAME/Aether/main/Aether.lua"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/yungfuzi/L/refs/heads/main/Ignite/Library.lua"))()
 
 local Window = Library:CreateWindow({
     Title = "Aether",
@@ -84,7 +64,7 @@ Library:Notify("Aether loaded", 3, "success")
 
 ```lua
 local Window = Library:CreateWindow({
-    Title = "Aether",
+    Title = "Ignite",
     Size = UDim2.fromOffset(780, 560),
     Center = true,
     Resizable = true,
@@ -408,7 +388,7 @@ When the window hides, it shrinks / slides up and a pill drops in from the top. 
 
 ```lua
 local Island = Window:DynamicUi({
-    Text = "Aether",
+    Text = "Ignite",
     Icon = "rbxassetid://...",
     ImageOnly = false,
     ImageScaleType = "Fit",
@@ -529,39 +509,6 @@ Destroys the UI, cleans connections, and sets `Library.Unloaded = true`.
 
 ---
 
-## Layout notes
-
-```
-┌─────────────────────────────────────────────┐
-│ Title bar                                   │
-├──────────┬──────────────────────────────────┤
-│ Search   │                                  │
-│ Section  │  ┌ Left Groupbox ┐ ┌ Right GB ┐ │
-│  Tab     │  │ elements      │ │ elements │ │
-│  Tab     │  └───────────────┘ └──────────┘ │
-│ Section  │  ┌──── Full Groupbox ─────────┐ │
-│  Tab     │  │  Sec(1)    │   Sec(2)      │ │
-│          │  └────────────────────────────┘ │
-└──────────┴──────────────────────────────────┘
-```
-
-- **One** `ScrollingFrame` per tab
-- Left / Right columns always side-by-side
-- Full groupboxes stack above the dual columns
-- No per-groupbox scrollbars
-
----
-
-## File map
-
-```text
-Aether/
-├── Aether.lua      -- library
-├── example.lua     -- demo (loadstring only, no comments)
-└── README.md
-```
-
----
 
 ## License
 
