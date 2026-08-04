@@ -1891,35 +1891,126 @@ function GroupboxMeta:AddDependencyGroupbox(info)
     return depBox
 end
 
+--// Nested section inside a groupbox (mainly for full-side boxes)
+function GroupboxMeta:GroupBoxSection(sideOrText, text)
+    local side, title
+    if type(sideOrText) == "string" and text ~= nil then
+        side = string.lower(sideOrText)
+        title = text
+    else
+        side = "full"
+        title = sideOrText
+    end
+
+    local nestHolder = New("Frame", {
+        BackgroundColor3 = "Element",
+        BackgroundTransparency = 0.35,
+        Size = UDim2.new(1, 0, 0, 0),
+        ClipsDescendants = true,
+        Parent = self.Content,
+    })
+    AddCorner(nestHolder, 6)
+    AddStroke(nestHolder)
+
+    local nestHeaderH = (title and tostring(title) ~= "") and 28 or 0
+    local nestHeader = nil
+    if nestHeaderH > 0 then
+        nestHeader = New("TextLabel", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, nestHeaderH),
+            Text = "  " .. tostring(title),
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Font = Enum.Font.GothamBold,
+            TextSize = 12,
+            TextColor3 = "SubText",
+            Parent = nestHolder,
+        })
+    end
+
+    local nestContent = New("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, nestHeaderH),
+        Size = UDim2.new(1, 0, 0, 0),
+        Parent = nestHolder,
+    })
+    AddPadding(nestContent, 6, 10, 8, 10)
+    local nestLayout = New("UIListLayout", {
+        Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = nestContent,
+    })
+
+    local nestBox = setmetatable({
+        Name = title or "Section",
+        Holder = nestHolder,
+        Header = nestHeader,
+        TitleLabel = nestHeader,
+        Chevron = nil,
+        Content = nestContent,
+        Layout = nestLayout,
+        Elements = {},
+        Collapsed = false,
+        Visible = true,
+        Column = self.Column,
+        ParentBox = self,
+        Maid = CreateMaid(),
+        HeaderHeight = nestHeaderH,
+        NoHeader = nestHeaderH == 0,
+        Variant = 2,
+        _destroyed = false,
+    }, GroupboxMeta)
+
+    function nestBox:Resize()
+        if self._destroyed then return end
+        local target = math.max(self.Layout.AbsoluteContentSize.Y + 12, 0)
+        self.Content.Size = UDim2.new(1, 0, 0, target)
+        self.Holder.Size = UDim2.new(1, 0, 0, self.HeaderHeight + target)
+        if self.ParentBox then self.ParentBox:Resize() end
+    end
+
+    nestLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        nestBox:Resize()
+    end)
+
+    table.insert(self.Elements, nestBox)
+    task.defer(function() nestBox:Resize() end)
+    return nestBox
+end
+
 --// Create Groupbox
 local function CreateGroupbox(column, name, opts)
     opts = opts or {}
-    local headerH = 34
+    local variant = tonumber(opts.Variant) or 1
+    local noHeader = variant == 2 or opts.NoHeader == true
+    local headerH = noHeader and 0 or 34
+    local transparency = opts.Transparency
+    if transparency == nil then transparency = 0 end
 
-    --// manual height (no AutomaticSize) so collapse can shrink the holder
     local holder = New("Frame", {
         BackgroundColor3 = "Surface",
-        Size = UDim2.new(1, 0, 0, headerH),
+        BackgroundTransparency = transparency,
+        Size = UDim2.new(1, 0, 0, math.max(headerH, 8)),
         ClipsDescendants = true,
         Parent = column.Container,
     })
     AddCorner(holder, Library.CornerRadius)
-    AddStroke(holder)
+    if transparency < 1 then
+        AddStroke(holder)
+    end
 
-    local header = New("TextButton", {
-        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, headerH), Text = "", Parent = holder,
-    })
-    local titleLabel = New("TextLabel", {
-        Text = name or "Group", Size = UDim2.new(1, -36, 1, 0),
-        Position = UDim2.fromOffset(12, 0), TextXAlignment = Enum.TextXAlignment.Left,
-        Font = Enum.Font.GothamBold, TextSize = 13, Parent = header,
-    })
-
-    --// right chevron: open=90 (down), collapsed=0 (right)
-    local chevron = IconImage(header, "ChevronRight", UDim2.fromOffset(12, 12), "SubText")
-    chevron.AnchorPoint = Vector2.new(1, 0.5)
-    chevron.Position = UDim2.new(1, -12, 0.5, 0)
-    chevron.Rotation = 90
+    local header, titleLabel, chevron = nil, nil, nil
+    if not noHeader then
+        header = New("TextButton", {
+            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, headerH), Text = "", Parent = holder,
+        })
+        titleLabel = New("TextLabel", {
+            Text = name or "Group", Size = UDim2.new(1, -36, 1, 0),
+            Position = UDim2.fromOffset(12, 0), TextXAlignment = Enum.TextXAlignment.Left,
+            Font = Enum.Font.GothamBold, TextSize = 13, Parent = header,
+        })
+        chevron = IconImage(header, "ChevronRight", UDim2.fromOffset(12, 12), "SubText")
+        chevron.AnchorPoint = Vector2.new(1, 0.5)
+        chevron.Position = UDim2.new(1, -12, 0.5, 0)
+        chevron.Rotation = 90
+    end
 
     local content = New("Frame", {
         BackgroundTransparency = 1,
@@ -1928,7 +2019,7 @@ local function CreateGroupbox(column, name, opts)
         ClipsDescendants = true,
         Parent = holder,
     })
-    AddPadding(content, 4, 12, 10, 12)
+    AddPadding(content, noHeader and 10 or 4, 12, 10, 12)
     local layout = New("UIListLayout", {
         Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = content,
     })
@@ -1937,16 +2028,19 @@ local function CreateGroupbox(column, name, opts)
         Name = name, Holder = holder, Header = header, TitleLabel = titleLabel,
         Chevron = chevron, Content = content, Layout = layout, Elements = {},
         Collapsed = false, Visible = true, Column = column, Maid = CreateMaid(),
-        HeaderHeight = headerH, _destroyed = false, _heightTween = nil, _holderTween = nil,
+        HeaderHeight = headerH, Variant = variant, NoHeader = noHeader, IsFull = column.IsFull == true,
+        _destroyed = false, _heightTween = nil, _holderTween = nil,
     }, GroupboxMeta)
 
     layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         if not box.Collapsed then box:Resize() end
     end)
 
-    box.Maid:Connect(header.MouseButton1Click, function()
-        box:ToggleCollapse()
-    end)
+    if header then
+        box.Maid:Connect(header.MouseButton1Click, function()
+            box:ToggleCollapse()
+        end)
+    end
 
     task.defer(function() box:Resize() end)
     table.insert(column.Groupboxes, box)
@@ -2005,16 +2099,23 @@ function TabMeta:Hide()
 end
 
 function TabMeta:AddLeftGroupbox(name, opts)
+    if type(name) == "table" then opts = name; name = opts.Name or opts.Text or "Group" end
     return self.LeftColumn:AddGroupbox(name, opts)
 end
 function TabMeta:AddRightGroupbox(name, opts)
+    if type(name) == "table" then opts = name; name = opts.Name or opts.Text or "Group" end
     return self.RightColumn:AddGroupbox(name, opts)
+end
+function TabMeta:AddFullGroupbox(name, opts)
+    if type(name) == "table" then opts = name; name = opts.Name or opts.Text or "Group" end
+    return self.FullColumn:AddGroupbox(name, opts)
 end
 function TabMeta:AddGroupbox(info)
     info = info or {}
-    local side = string.lower(info.Side or "Left")
-    local name = info.Name or "Group"
+    local side = string.lower(tostring(info.Side or "Left"))
+    local name = info.Name or info.Text or "Group"
     if side == "right" then return self:AddRightGroupbox(name, info) end
+    if side == "full" or side == "single" then return self:AddFullGroupbox(name, info) end
     return self:AddLeftGroupbox(name, info)
 end
 
@@ -2301,9 +2402,11 @@ function Library:CreateWindow(info)
             CanvasSize = UDim2.new(),
             Parent = canvas,
         })
-        AddPadding(scroll, 12, 12, 12, 12)
+        --// vertical padding only — horizontal inset applied in layout (avoids scale overflow)
+        AddPadding(scroll, 12, 0, 12, 0)
 
         local gap = 12
+        local edge = 12
         local columnsFrame = New("Frame", {
             BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 0, 0),
@@ -2312,8 +2415,8 @@ function Library:CreateWindow(info)
 
         local leftColFrame = New("Frame", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, 0),
-            Size = UDim2.fromOffset(200, 0),
+            Position = UDim2.fromOffset(edge, 0),
+            Size = UDim2.new(0.5, -(edge + gap / 2), 0, 0),
             Parent = columnsFrame,
         })
         local leftLayout = New("UIListLayout", {
@@ -2322,12 +2425,23 @@ function Library:CreateWindow(info)
 
         local rightColFrame = New("Frame", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(212, 0),
-            Size = UDim2.fromOffset(200, 0),
+            Position = UDim2.new(0.5, gap / 2, 0, 0),
+            Size = UDim2.new(0.5, -(edge + gap / 2), 0, 0),
             Parent = columnsFrame,
         })
         local rightLayout = New("UIListLayout", {
             Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder, Parent = rightColFrame,
+        })
+
+        local fullColFrame = New("Frame", {
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(edge, 0),
+            Size = UDim2.new(1, -(edge * 2), 0, 0),
+            Visible = true,
+            Parent = columnsFrame,
+        })
+        local fullLayout = New("UIListLayout", {
+            Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder, Parent = fullColFrame,
         })
 
         local function applyColumnLayout()
@@ -2335,18 +2449,25 @@ function Library:CreateWindow(info)
 
             local lh = math.max(leftLayout.AbsoluteContentSize.Y, 0)
             local rh = math.max(rightLayout.AbsoluteContentSize.Y, 0)
+            local fh = math.max(fullLayout.AbsoluteContentSize.Y, 0)
             local halfGap = gap / 2
 
-            --// scale-based so both columns always fit inside the scroller
-            columnsFrame.Size = UDim2.new(1, 0, 0, math.max(lh, rh, 1))
-            leftColFrame.Position = UDim2.new(0, 0, 0, 0)
-            leftColFrame.Size = UDim2.new(0.5, -halfGap, 0, lh)
-            rightColFrame.Position = UDim2.new(0.5, halfGap, 0, 0)
-            rightColFrame.Size = UDim2.new(0.5, -halfGap, 0, rh)
+            leftColFrame.Position = UDim2.fromOffset(edge, fh > 0 and (fh + gap) or 0)
+            leftColFrame.Size = UDim2.new(0.5, -(edge + halfGap), 0, lh)
+            rightColFrame.Position = UDim2.new(0.5, halfGap, 0, fh > 0 and (fh + gap) or 0)
+            rightColFrame.Size = UDim2.new(0.5, -(edge + halfGap), 0, rh)
+
+            fullColFrame.Position = UDim2.fromOffset(edge, 0)
+            fullColFrame.Size = UDim2.new(1, -(edge * 2), 0, fh)
+
+            local dualH = math.max(lh, rh)
+            local totalH = fh + ((fh > 0 and dualH > 0) and gap or 0) + dualH
+            columnsFrame.Size = UDim2.new(1, 0, 0, math.max(totalH, 1))
         end
 
         leftLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyColumnLayout)
         rightLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyColumnLayout)
+        fullLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyColumnLayout)
         scroll:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyColumnLayout)
 
         local leftColumn = setmetatable({
@@ -2357,16 +2478,21 @@ function Library:CreateWindow(info)
             Container = rightColFrame, Layout = rightLayout, Groupboxes = {}, Side = "Right", Tab = nil,
             UpdateHeight = applyColumnLayout,
         }, ColumnMeta)
+        local fullColumn = setmetatable({
+            Container = fullColFrame, Layout = fullLayout, Groupboxes = {}, Side = "Full", Tab = nil,
+            UpdateHeight = applyColumnLayout, IsFull = true,
+        }, ColumnMeta)
 
         local tab = setmetatable({
             Name = name, Button = tabBtn, ButtonLabel = tabLabel, Canvas = canvas,
             Scroll = scroll, ColumnsFrame = columnsFrame,
-            LeftColumn = leftColumn, RightColumn = rightColumn,
+            LeftColumn = leftColumn, RightColumn = rightColumn, FullColumn = fullColumn,
             Maid = CreateMaid(), _destroyed = false,
         }, TabMeta)
 
         leftColumn.Tab = tab
         rightColumn.Tab = tab
+        fullColumn.Tab = tab
 
         applyColumnLayout()
         windowMaid:Connect(main:GetPropertyChangedSignal("AbsoluteSize"), applyColumnLayout)
