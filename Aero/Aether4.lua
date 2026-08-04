@@ -80,8 +80,8 @@ local Library = {
         Collapse= { Time = 0.25, Style = Enum.EasingStyle.Quint, Direction = Enum.EasingDirection.Out },
         Notify  = { Time = 0.35, Style = Enum.EasingStyle.Quint, Direction = Enum.EasingDirection.Out },
         Toggle  = { Time = 0.22, Style = Enum.EasingStyle.Back, Direction = Enum.EasingDirection.Out }, -- squishy
-        Slider  = { Time = 0.12, Style = Enum.EasingStyle.Quad, Direction = Enum.EasingDirection.Out },
-        Drag    = { Time = 0.14, Style = Enum.EasingStyle.Exponential, Direction = Enum.EasingDirection.Out },
+        Slider  = { Time = 0.28, Style = Enum.EasingStyle.Quint, Direction = Enum.EasingDirection.Out },
+        Drag    = { Time = 0.28, Style = Enum.EasingStyle.Quint, Direction = Enum.EasingDirection.Out },
         Hover   = { Time = 0.15, Style = Enum.EasingStyle.Quad, Direction = Enum.EasingDirection.Out },
     },
 
@@ -474,19 +474,17 @@ function Library:Notify(text, duration, notifType)
         Parent = card,
     })
 
-    -- slide in from right
+    --// slide in from off-screen right
+    local slideOffset = 340
     if Library.Animations.Notifications and Library.Animations.Enabled then
-        card.Position = UDim2.fromOffset(40, 0)
+        card.Position = UDim2.fromOffset(slideOffset, 0)
         Tween(card, { Position = UDim2.fromOffset(0, 0) }, "Notify")
     end
 
     task.delay(duration, function()
         if not card.Parent then return end
         if Library.Animations.Notifications and Library.Animations.Enabled then
-            local t = Tween(card, { Position = UDim2.fromOffset(40, 0) }, "Notify")
-            -- also fade
-            Tween(card, { BackgroundTransparency = 1 }, "Notify")
-            Tween(label, { TextTransparency = 1 }, "Notify")
+            local t = Tween(card, { Position = UDim2.fromOffset(slideOffset, 0) }, "Notify")
             if t then t.Completed:Wait() end
         end
         card:Destroy()
@@ -1519,6 +1517,7 @@ function GroupboxMeta:AddColorPicker(flag, info)
         BackgroundColor3 = Color3.fromHSV(h, 1, 1),
         Size = UDim2.fromOffset(196, 140),
         ClipsDescendants = true,
+        Active = true,
         Parent = panel,
     })
     AddCorner(svFrame, 8)
@@ -1526,6 +1525,7 @@ function GroupboxMeta:AddColorPicker(flag, info)
     local whiteGrad = New("Frame", {
         BackgroundColor3 = Color3.new(1, 1, 1),
         Size = UDim2.fromScale(1, 1),
+        Active = false,
         Parent = svFrame,
     })
     AddCorner(whiteGrad, 8)
@@ -1539,6 +1539,7 @@ function GroupboxMeta:AddColorPicker(flag, info)
     local blackGrad = New("Frame", {
         BackgroundColor3 = Color3.new(0, 0, 0),
         Size = UDim2.fromScale(1, 1),
+        Active = false,
         Parent = svFrame,
     })
     AddCorner(blackGrad, 8)
@@ -1550,23 +1551,34 @@ function GroupboxMeta:AddColorPicker(flag, info)
     })
     bg.Parent = blackGrad
 
-    --// SV cursor (crosshair ring)
+    --// transparent hit layer on top of gradients
+    local svHit = New("TextButton", {
+        BackgroundTransparency = 1,
+        Size = UDim2.fromScale(1, 1),
+        Text = "",
+        ZIndex = 5,
+        Parent = svFrame,
+    })
+
+    --// SV cursor
     local cursor = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Size = UDim2.fromOffset(14, 14),
+        Size = UDim2.fromOffset(16, 16),
         BackgroundTransparency = 1,
         Position = UDim2.fromScale(s, 1 - v),
         ZIndex = 10,
+        Active = false,
         Parent = svFrame,
     })
     local cursorOuter = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(14, 14),
+        Size = UDim2.fromOffset(16, 16),
         BackgroundTransparency = 1,
+        Active = false,
         Parent = cursor,
     })
-    AddCorner(cursorOuter, 7)
+    AddCorner(cursorOuter, 8)
     local outerStroke = Instance.new("UIStroke")
     outerStroke.Color = Color3.new(1, 1, 1)
     outerStroke.Thickness = 2
@@ -1574,11 +1586,12 @@ function GroupboxMeta:AddColorPicker(flag, info)
     local cursorInner = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(14, 14),
+        Size = UDim2.fromOffset(16, 16),
         BackgroundTransparency = 1,
+        Active = false,
         Parent = cursor,
     })
-    AddCorner(cursorInner, 7)
+    AddCorner(cursorInner, 8)
     local innerStroke = Instance.new("UIStroke")
     innerStroke.Color = Color3.new(0, 0, 0)
     innerStroke.Thickness = 1
@@ -1589,6 +1602,7 @@ function GroupboxMeta:AddColorPicker(flag, info)
         BackgroundColor3 = Color3.new(1, 1, 1),
         Position = UDim2.fromOffset(0, 150),
         Size = UDim2.new(1, 0, 0, 14),
+        Active = true,
         Parent = panel,
     })
     AddCorner(hueBar, 5)
@@ -1680,34 +1694,41 @@ function GroupboxMeta:AddColorPicker(flag, info)
     local maid = CreateMaid()
     local draggingSV, draggingHue = false, false
 
-    maid:Connect(svFrame.InputBegan, function(input)
+    local function updateSV(pos)
+        local rel = pos - svFrame.AbsolutePosition
+        local size = svFrame.AbsoluteSize
+        s = math.clamp(rel.X / math.max(size.X, 1), 0, 1)
+        v = 1 - math.clamp(rel.Y / math.max(size.Y, 1), 0, 1)
+        commitColor(true)
+    end
+
+    local function updateHue(pos)
+        local rel = pos.X - hueBar.AbsolutePosition.X
+        h = math.clamp(rel / math.max(hueBar.AbsoluteSize.X, 1), 0, 1)
+        commitColor(true)
+    end
+
+    maid:Connect(svHit.InputBegan, function(input)
         if IsClick(input) then
             draggingSV = true
-            local rel = input.Position - svFrame.AbsolutePosition
-            s = math.clamp(rel.X / math.max(svFrame.AbsoluteSize.X, 1), 0, 1)
-            v = 1 - math.clamp(rel.Y / math.max(svFrame.AbsoluteSize.Y, 1), 0, 1)
-            commitColor(true)
+            updateSV(input.Position)
         end
     end)
     maid:Connect(hueBar.InputBegan, function(input)
         if IsClick(input) then
             draggingHue = true
-            local rel = input.Position.X - hueBar.AbsolutePosition.X
-            h = math.clamp(rel / math.max(hueBar.AbsoluteSize.X, 1), 0, 1)
-            commitColor(true)
+            updateHue(input.Position)
         end
     end)
     maid:Connect(Services.UserInputService.InputChanged, function(input)
-        if not IsHover(input) then return end
+        local t = input.UserInputType
+        if t ~= Enum.UserInputType.MouseMovement and t ~= Enum.UserInputType.Touch then
+            return
+        end
         if draggingSV then
-            local rel = input.Position - svFrame.AbsolutePosition
-            s = math.clamp(rel.X / math.max(svFrame.AbsoluteSize.X, 1), 0, 1)
-            v = 1 - math.clamp(rel.Y / math.max(svFrame.AbsoluteSize.Y, 1), 0, 1)
-            commitColor(true)
+            updateSV(input.Position)
         elseif draggingHue then
-            local rel = input.Position.X - hueBar.AbsolutePosition.X
-            h = math.clamp(rel / math.max(hueBar.AbsoluteSize.X, 1), 0, 1)
-            commitColor(true)
+            updateHue(input.Position)
         end
     end)
     maid:Connect(Services.UserInputService.InputEnded, function(input)
@@ -1929,6 +1950,9 @@ function TabMeta:Show()
         if self.ButtonLabel then self.ButtonLabel.TextTransparency = 0 end
     end
     Library.ActiveTab = self
+    if self.LeftColumn and self.LeftColumn.UpdateHeight then
+        task.defer(self.LeftColumn.UpdateHeight)
+    end
     if Library.Searching then Library:UpdateSearch(Library.SearchText) end
 end
 
@@ -1987,7 +2011,7 @@ function Library:CreateWindow(info)
         Title = "Aether", Footer = "", Size = UDim2.fromOffset(720, 520),
         Position = nil, Center = true, Resizable = true,
         ToggleKeybind = Enum.KeyCode.RightControl, Searchbar = true, GlobalSearch = false,
-        StackColumnsOnMobile = true, MinSidebarWidth = 140, SidebarWidth = 168,
+        StackColumnsOnMobile = false, MinSidebarWidth = 140, SidebarWidth = 168,
         CornerRadius = 10, AutoShow = true,
     })
 
@@ -2026,21 +2050,9 @@ function Library:CreateWindow(info)
 
     local titleLabel = New("TextLabel", {
         Text = info.Title, Font = Enum.Font.GothamBold, TextSize = 15,
-        Size = UDim2.new(1, -50, 1, 0), Position = UDim2.fromOffset(14, 0),
+        Size = UDim2.new(1, -20, 1, 0), Position = UDim2.fromOffset(14, 0),
         TextXAlignment = Enum.TextXAlignment.Left, Parent = topBar,
     })
-
-    local closeBtn = New("ImageButton", {
-        AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0),
-        Size = UDim2.fromOffset(20, 20), Image = Library.Icons.Close,
-        ImageColor3 = "SubText", Parent = topBar,
-    })
-    closeBtn.MouseEnter:Connect(function()
-        Tween(closeBtn, { ImageColor3 = Library.Theme.Danger }, "Hover")
-    end)
-    closeBtn.MouseLeave:Connect(function()
-        Tween(closeBtn, { ImageColor3 = Library.Theme.SubText }, "Hover")
-    end)
 
     Library:MakeDraggable(main, topBar)
 
@@ -2096,7 +2108,128 @@ function Library:CreateWindow(info)
         Main = main, Sidebar = sidebar, ContentHost = contentHost,
         Tabs = {}, Title = info.Title, Info = info, Maid = windowMaid,
         StackColumnsOnMobile = info.StackColumnsOnMobile,
+        Sections = {},
+        _currentSection = nil,
+        _sidebarOrder = 0,
     }
+
+    local function nextSidebarOrder()
+        Window._sidebarOrder += 1
+        return Window._sidebarOrder
+    end
+
+    function Window:AddTabSection(sectionInfo)
+        if type(sectionInfo) == "string" then
+            sectionInfo = { Text = sectionInfo }
+        end
+        sectionInfo = Validate(sectionInfo or {}, {
+            Text = "Section",
+            Collapsible = false,
+            XAlignments = "Left",
+            XAlegnments = nil,
+            Icon = nil,
+        })
+
+        local align = string.lower(tostring(sectionInfo.XAlignments or sectionInfo.XAlegnments or "Left"))
+        local textAlign = Enum.TextXAlignment.Left
+        if align == "center" then
+            textAlign = Enum.TextXAlignment.Center
+        elseif align == "right" then
+            textAlign = Enum.TextXAlignment.Right
+        end
+
+        local collapsible = sectionInfo.Collapsible == true
+        local collapsed = false
+        local tabButtons = {}
+
+        local header = New("TextButton", {
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 26),
+            Text = "",
+            LayoutOrder = nextSidebarOrder(),
+            AutoButtonColor = false,
+            Parent = sidebar,
+        })
+
+        local leftPad = 6
+        local iconImg = nil
+        if sectionInfo.Icon and tostring(sectionInfo.Icon) ~= "" then
+            iconImg = IconImage(header, sectionInfo.Icon, UDim2.fromOffset(14, 14), "SubText")
+            iconImg.Position = UDim2.fromOffset(6, 6)
+            leftPad = 26
+        end
+
+        local label = New("TextLabel", {
+            Text = sectionInfo.Text,
+            Size = UDim2.new(1, collapsible and -(leftPad + 22) or -leftPad, 1, 0),
+            Position = UDim2.fromOffset(leftPad, 0),
+            TextXAlignment = textAlign,
+            TextColor3 = "SubText",
+            TextSize = 11,
+            Font = Enum.Font.GothamMedium,
+            TextTransparency = 0.15,
+            Parent = header,
+        })
+
+        local chevron = nil
+        if collapsible then
+            chevron = IconImage(header, "ChevronRight", UDim2.fromOffset(12, 12), "SubText")
+            chevron.AnchorPoint = Vector2.new(1, 0.5)
+            chevron.Position = UDim2.new(1, -4, 0.5, 0)
+            chevron.Rotation = 90
+            chevron.ImageTransparency = 0.25
+        end
+
+        local function setCollapsed(state)
+            collapsed = state and true or false
+            if chevron then
+                Tween(chevron, { Rotation = collapsed and 0 or 90 }, "Default")
+            end
+            for _, btn in ipairs(tabButtons) do
+                btn.Visible = not collapsed
+            end
+        end
+
+        local section = {
+            Text = sectionInfo.Text,
+            Header = header,
+            Label = label,
+            Collapsible = collapsible,
+            Collapsed = false,
+            TabButtons = tabButtons,
+            Tabs = {},
+        }
+
+        function section:SetCollapsed(v)
+            setCollapsed(v)
+            self.Collapsed = collapsed
+        end
+
+        function section:Toggle()
+            self:SetCollapsed(not collapsed)
+        end
+
+        function section:SetText(t)
+            self.Text = t
+            label.Text = t
+        end
+
+        function section:RegisterTabButton(btn, tab)
+            table.insert(tabButtons, btn)
+            table.insert(self.Tabs, tab)
+            btn.Visible = not collapsed
+        end
+
+        if collapsible then
+            header.MouseButton1Click:Connect(function()
+                section:Toggle()
+            end)
+        end
+
+        table.insert(Window.Sections, section)
+        Window._currentSection = section
+        return section
+    end
 
     function Window:AddTab(tabInfo)
         if type(tabInfo) == "string" then tabInfo = { Name = tabInfo } end
@@ -2105,11 +2238,22 @@ function Library:CreateWindow(info)
 
         local tabBtn = New("TextButton", {
             BackgroundColor3 = "Element", BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 32), Text = "", Parent = sidebar,
+            Size = UDim2.new(1, 0, 0, 32), Text = "",
+            LayoutOrder = nextSidebarOrder(),
+            Parent = sidebar,
         })
         AddCorner(tabBtn, 6)
+
+        local labelPad = 10
+        if tabInfo.Icon and tostring(tabInfo.Icon) ~= "" then
+            local tIcon = IconImage(tabBtn, tabInfo.Icon, UDim2.fromOffset(14, 14), "SubText")
+            tIcon.Position = UDim2.fromOffset(10, 9)
+            tIcon.ImageTransparency = 0.35
+            labelPad = 30
+        end
+
         local tabLabel = New("TextLabel", {
-            Text = name, Size = UDim2.fromScale(1, 1), Position = UDim2.fromOffset(10, 0),
+            Text = name, Size = UDim2.new(1, -labelPad, 1, 0), Position = UDim2.fromOffset(labelPad, 0),
             TextXAlignment = Enum.TextXAlignment.Left, TextTransparency = 0.45, Parent = tabBtn,
         })
 
@@ -2136,11 +2280,10 @@ function Library:CreateWindow(info)
             Parent = scroll,
         })
 
-        --// absolute left/right placement (UIListLayout scale is unreliable)
         local leftColFrame = New("Frame", {
             BackgroundTransparency = 1,
             Position = UDim2.fromOffset(0, 0),
-            Size = UDim2.new(0.5, -gap / 2, 0, 0),
+            Size = UDim2.fromOffset(200, 0),
             Parent = columnsFrame,
         })
         local leftLayout = New("UIListLayout", {
@@ -2149,55 +2292,36 @@ function Library:CreateWindow(info)
 
         local rightColFrame = New("Frame", {
             BackgroundTransparency = 1,
-            Position = UDim2.new(0.5, gap / 2, 0, 0),
-            Size = UDim2.new(0.5, -gap / 2, 0, 0),
+            Position = UDim2.fromOffset(212, 0),
+            Size = UDim2.fromOffset(200, 0),
             Parent = columnsFrame,
         })
         local rightLayout = New("UIListLayout", {
             Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder, Parent = rightColFrame,
         })
 
-        local function isStacked()
-            if Library.IsMobile and Window.StackColumnsOnMobile then return true end
-            return main.AbsoluteSize.X < 580
-        end
-
-        local function syncColumnsHeight()
-            local lh = leftLayout.AbsoluteContentSize.Y
-            local rh = rightLayout.AbsoluteContentSize.Y
-            local stacked = isStacked()
-            if stacked then
-                columnsFrame.Size = UDim2.new(1, 0, 0, lh + rh + gap)
-            else
-                columnsFrame.Size = UDim2.new(1, 0, 0, math.max(lh, rh))
-            end
-        end
-
         local function applyColumnLayout()
             if not leftColFrame or not rightColFrame then return end
-            local stacked = isStacked()
-            if stacked then
-                leftColFrame.Position = UDim2.fromOffset(0, 0)
-                leftColFrame.Size = UDim2.new(1, 0, 0, 0)
-                rightColFrame.Position = UDim2.new(0, 0, 0, leftLayout.AbsoluteContentSize.Y + gap)
-                rightColFrame.Size = UDim2.new(1, 0, 0, 0)
-            else
-                leftColFrame.Position = UDim2.fromOffset(0, 0)
-                leftColFrame.Size = UDim2.new(0.5, -gap / 2, 0, 0)
-                rightColFrame.Position = UDim2.new(0.5, gap / 2, 0, 0)
-                rightColFrame.Size = UDim2.new(0.5, -gap / 2, 0, 0)
+
+            local totalW = scroll.AbsoluteSize.X
+            if totalW < 50 then
+                totalW = math.max(main.AbsoluteSize.X - (info.SidebarWidth or 168) - 30, 320)
             end
-            --// grow frames to content
-            leftColFrame.Size = UDim2.new(leftColFrame.Size.X.Scale, leftColFrame.Size.X.Offset, 0, leftLayout.AbsoluteContentSize.Y)
-            rightColFrame.Size = UDim2.new(rightColFrame.Size.X.Scale, rightColFrame.Size.X.Offset, 0, rightLayout.AbsoluteContentSize.Y)
-            if stacked then
-                rightColFrame.Position = UDim2.new(0, 0, 0, leftColFrame.Size.Y.Offset + gap)
-            end
-            syncColumnsHeight()
+
+            local lh = math.max(leftLayout.AbsoluteContentSize.Y, 0)
+            local rh = math.max(rightLayout.AbsoluteContentSize.Y, 0)
+            local colW = math.max(math.floor((totalW - gap) / 2), 80)
+
+            leftColFrame.Position = UDim2.fromOffset(0, 0)
+            leftColFrame.Size = UDim2.fromOffset(colW, lh)
+            rightColFrame.Position = UDim2.fromOffset(colW + gap, 0)
+            rightColFrame.Size = UDim2.fromOffset(colW, rh)
+            columnsFrame.Size = UDim2.fromOffset(totalW, math.max(lh, rh))
         end
 
         leftLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyColumnLayout)
         rightLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyColumnLayout)
+        scroll:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyColumnLayout)
 
         local leftColumn = setmetatable({
             Container = leftColFrame, Layout = leftLayout, Groupboxes = {}, Side = "Left", Tab = nil,
@@ -2231,6 +2355,12 @@ function Library:CreateWindow(info)
 
         Window.Tabs[name] = tab
         Library.Tabs[name] = tab
+
+        if Window._currentSection and Window._currentSection.RegisterTabButton then
+            Window._currentSection:RegisterTabButton(tabBtn, tab)
+            tab.Section = Window._currentSection
+        end
+
         if not Library.ActiveTab then tab:Show() end
         return tab
     end
@@ -2271,8 +2401,6 @@ function Library:CreateWindow(info)
         main:Destroy()
         Library.Window = nil
     end
-
-    windowMaid:Connect(closeBtn.MouseButton1Click, function() Window:Toggle(false) end)
 
     Library.Window = Window
     Library.Toggle = function(_, v) return Window:Toggle(v) end
