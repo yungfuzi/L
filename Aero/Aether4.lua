@@ -21,9 +21,7 @@ local protectgui = protectgui or (syn and syn.protect_gui) or function() end
 local gethui = gethui or function() return Services.CoreGui end
 local setclipboard = setclipboard or function() end
 
-----------------------------------------------------------------
--- Library Core
-----------------------------------------------------------------
+--// Library Core
 local Library = {
     Version = "1.1.0",
     LocalPlayer = LocalPlayer,
@@ -115,9 +113,7 @@ local Library = {
     },
 }
 
-----------------------------------------------------------------
--- Utilities
-----------------------------------------------------------------
+--// Utilities
 local function DeepCopy(t)
     if type(t) ~= "table" then return t end
     local n = {}
@@ -212,9 +208,7 @@ local function Tween(inst, props, key)
     return t
 end
 
-----------------------------------------------------------------
--- Signal / Maid
-----------------------------------------------------------------
+--// Signal / Maid
 function Library:GiveSignal(conn)
     if conn then table.insert(self.Signals, conn) end
     return conn
@@ -248,9 +242,7 @@ local function CreateMaid()
     return maid
 end
 
-----------------------------------------------------------------
--- Theme Registry
-----------------------------------------------------------------
+--// Theme Registry
 function Library:AddToRegistry(inst, props)
     self.Registry[inst] = props
 end
@@ -290,9 +282,7 @@ function Library:SetAnimationConfig(key, cfg)
     Library.AnimationConfig[key] = Merge(Library.AnimationConfig[key] or Library.AnimationConfig.Default, cfg)
 end
 
-----------------------------------------------------------------
--- Instance helpers
-----------------------------------------------------------------
+--// Instance helpers
 local Templates = {
     Frame = { BorderSizePixel = 0, BackgroundColor3 = "Surface" },
     TextLabel = {
@@ -392,9 +382,7 @@ local function IconImage(parent, iconKey, size, colorKey)
     return img
 end
 
-----------------------------------------------------------------
--- Parenting / Mobile
-----------------------------------------------------------------
+--// Parenting / Mobile
 local function ParentUI(ui)
     pcall(protectgui, ui)
     local ok = pcall(function() ui.Parent = gethui() end)
@@ -416,9 +404,7 @@ do
     end
 end
 
-----------------------------------------------------------------
--- ScreenGui
-----------------------------------------------------------------
+--// ScreenGui
 local ScreenGui = New("ScreenGui", {
     Name = "Aether",
     DisplayOrder = 1000,
@@ -432,9 +418,7 @@ ScreenGui.DescendantRemoving:Connect(function(desc)
     Library:RemoveFromRegistry(desc)
 end)
 
-----------------------------------------------------------------
--- Notifications (slide in / slide out)
-----------------------------------------------------------------
+--// Notifications
 local NotifyArea = New("Frame", {
     Name = "Notifications",
     AnchorPoint = Vector2.new(1, 0),
@@ -511,9 +495,7 @@ function Library:Notify(text, duration, notifType)
     return card
 end
 
-----------------------------------------------------------------
--- Dragging (smoothed) / Resizing
-----------------------------------------------------------------
+--// Dragging / Resizing
 function Library:MakeDraggable(ui, handle, ignoreToggle)
     local dragging, startPos, startFrame, targetPos
     local renderConn
@@ -583,9 +565,7 @@ function Library:MakeResizable(ui, handle, onResize)
     Library:GiveSignal(changed)
 end
 
-----------------------------------------------------------------
--- Option registry helpers
-----------------------------------------------------------------
+--// Option registry
 local function RegisterOption(flag, option)
     if flag and flag ~= "" then
         Library.Options[flag] = option
@@ -616,28 +596,34 @@ local function ApplyElementVisibility(holder, visible)
     holder.Visible = visible ~= false
 end
 
-----------------------------------------------------------------
--- GROUPBOX
-----------------------------------------------------------------
+--// Groupbox
 local GroupboxMeta = {}
 GroupboxMeta.__index = GroupboxMeta
 
 function GroupboxMeta:Resize()
     if self._destroyed then return end
-    local content, layout = self.Content, self.Layout
-    if not content or not layout then return end
+    local content, layout, holder = self.Content, self.Layout, self.Holder
+    if not content or not layout or not holder then return end
 
+    local headerH = self.HeaderHeight or 34
+    local pad = 12
     local target = 0
     if not self.Collapsed then
-        target = math.max(layout.AbsoluteContentSize.Y + 12, 0)
+        target = math.max(layout.AbsoluteContentSize.Y + pad, 0)
     end
 
     if self._heightTween then StopTween(self._heightTween) end
+    if self._holderTween then StopTween(self._holderTween) end
+
+    local contentSize = UDim2.new(1, 0, 0, target)
+    local holderSize = UDim2.new(1, 0, 0, headerH + target)
 
     if Library.Animations.Groupboxes and Library.Animations.Enabled then
-        self._heightTween = Tween(content, { Size = UDim2.new(1, 0, 0, target) }, "Collapse")
+        self._heightTween = Tween(content, { Size = contentSize }, "Collapse")
+        self._holderTween = Tween(holder, { Size = holderSize }, "Collapse")
     else
-        content.Size = UDim2.new(1, 0, 0, target)
+        content.Size = contentSize
+        holder.Size = holderSize
     end
 
     if self.Column and self.Column.UpdateHeight then
@@ -647,8 +633,9 @@ end
 
 function GroupboxMeta:SetCollapsed(state)
     self.Collapsed = state and true or false
+    --// right-chevron: 0 = collapsed (point right), 90 = open (point down)
     if self.Chevron then
-        local rot = self.Collapsed and -90 or 0
+        local rot = self.Collapsed and 0 or 90
         Tween(self.Chevron, { Rotation = rot }, "Default")
     end
     self:Resize()
@@ -684,9 +671,7 @@ function GroupboxMeta:Destroy()
     end
 end
 
-----------------------------------------------------------------
--- ELEMENT: Label / Divider / Paragraph
-----------------------------------------------------------------
+--// Label / Divider / Paragraph
 function GroupboxMeta:AddLabel(flagOrText, info)
     local text, flag
     if type(flagOrText) == "table" then
@@ -768,9 +753,7 @@ function GroupboxMeta:AddParagraph(flagOrText, info)
     return el
 end
 
-----------------------------------------------------------------
--- ELEMENT: Button
-----------------------------------------------------------------
+--// Button
 function GroupboxMeta:AddButton(flagOrInfo, info)
     if type(flagOrInfo) == "table" then info = flagOrInfo
     else info = info or {}; info.Text = info.Text or tostring(flagOrInfo) end
@@ -844,9 +827,7 @@ function GroupboxMeta:AddButton(flagOrInfo, info)
     return el
 end
 
-----------------------------------------------------------------
--- ELEMENT: Toggle (Switch / Checkbox / Button variants)
-----------------------------------------------------------------
+--// Toggle
 function GroupboxMeta:AddToggle(flag, info)
     info = Validate(info or {}, {
         Text = tostring(flag or "Toggle"),
@@ -1034,9 +1015,7 @@ GroupboxMeta.AddCheckbox = function(self, flag, info)
     return self:AddToggle(flag, info)
 end
 
-----------------------------------------------------------------
--- ELEMENT: Slider (thin rounded knob)
-----------------------------------------------------------------
+--// Slider
 function GroupboxMeta:AddSlider(flag, info)
     info = Validate(info or {}, {
         Text = tostring(flag or "Slider"), Default = 0, Min = 0, Max = 100, Rounding = 0,
@@ -1157,9 +1136,7 @@ function GroupboxMeta:AddSlider(flag, info)
     return el
 end
 
-----------------------------------------------------------------
--- ELEMENT: Input
-----------------------------------------------------------------
+--// Input
 function GroupboxMeta:AddInput(flag, info)
     info = Validate(info or {}, {
         Text = tostring(flag or "Input"), Default = "", Placeholder = "",
@@ -1237,9 +1214,7 @@ function GroupboxMeta:AddInput(flag, info)
     return el
 end
 
-----------------------------------------------------------------
--- ELEMENT: Dropdown (menu follows under button)
-----------------------------------------------------------------
+--// Dropdown
 function GroupboxMeta:AddDropdown(flag, info)
     info = Validate(info or {}, {
         Text = tostring(flag or "Dropdown"), Values = {}, Default = nil, Multi = false,
@@ -1437,9 +1412,7 @@ function GroupboxMeta:AddMultiDropdown(flag, info)
     return self:AddDropdown(flag, info)
 end
 
-----------------------------------------------------------------
--- ELEMENT: KeyPicker
-----------------------------------------------------------------
+--// KeyPicker
 function GroupboxMeta:AddKeyPicker(flag, info)
     info = Validate(info or {}, {
         Text = tostring(flag or "Key"), Default = "None", Mode = "Toggle",
@@ -1509,9 +1482,7 @@ function GroupboxMeta:AddKeyPicker(flag, info)
     return el
 end
 
-----------------------------------------------------------------
--- ELEMENT: ColorPicker (wheel-style panel)
-----------------------------------------------------------------
+--// ColorPicker
 function GroupboxMeta:AddColorPicker(flag, info)
     info = Validate(info or {}, {
         Text = tostring(flag or "Color"), Default = Color3.fromRGB(255, 255, 255),
@@ -1536,20 +1507,27 @@ function GroupboxMeta:AddColorPicker(flag, info)
     -- Color panel
     local panelOpen = false
     local panel = New("Frame", {
-        BackgroundColor3 = "Surface", Size = UDim2.fromOffset(220, 280),
+        BackgroundColor3 = "Surface", Size = UDim2.fromOffset(220, 290),
         Visible = false, ZIndex = 350, Parent = ScreenGui,
     })
     AddCorner(panel, 10)
     AddStroke(panel)
     AddPadding(panel, 12, 12, 12, 12)
 
-    -- SV square
+    --// SV square
     local svFrame = New("Frame", {
         BackgroundColor3 = Color3.fromHSV(h, 1, 1),
-        Size = UDim2.fromOffset(196, 140), Parent = panel,
+        Size = UDim2.fromOffset(196, 140),
+        ClipsDescendants = true,
+        Parent = panel,
     })
     AddCorner(svFrame, 8)
-    local whiteGrad = New("Frame", { BackgroundColor3 = Color3.new(1,1,1), Size = UDim2.fromScale(1,1), Parent = svFrame })
+
+    local whiteGrad = New("Frame", {
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        Size = UDim2.fromScale(1, 1),
+        Parent = svFrame,
+    })
     AddCorner(whiteGrad, 8)
     local wg = Instance.new("UIGradient")
     wg.Transparency = NumberSequence.new({
@@ -1557,7 +1535,12 @@ function GroupboxMeta:AddColorPicker(flag, info)
         NumberSequenceKeypoint.new(1, 1),
     })
     wg.Parent = whiteGrad
-    local blackGrad = New("Frame", { BackgroundColor3 = Color3.new(0,0,0), Size = UDim2.fromScale(1,1), Parent = svFrame })
+
+    local blackGrad = New("Frame", {
+        BackgroundColor3 = Color3.new(0, 0, 0),
+        Size = UDim2.fromScale(1, 1),
+        Parent = svFrame,
+    })
     AddCorner(blackGrad, 8)
     local bg = Instance.new("UIGradient")
     bg.Rotation = 90
@@ -1567,55 +1550,73 @@ function GroupboxMeta:AddColorPicker(flag, info)
     })
     bg.Parent = blackGrad
 
+    --// SV cursor (crosshair ring)
     local cursor = New("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(12, 12),
-        BackgroundTransparency = 1, Position = UDim2.fromScale(s, 1 - v), Parent = svFrame, ZIndex = 5,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Size = UDim2.fromOffset(14, 14),
+        BackgroundTransparency = 1,
+        Position = UDim2.fromScale(s, 1 - v),
+        ZIndex = 10,
+        Parent = svFrame,
     })
-    local cursorRing = New("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(12, 12), BackgroundTransparency = 1, Parent = cursor,
+    local cursorOuter = New("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(14, 14),
+        BackgroundTransparency = 1,
+        Parent = cursor,
     })
-    AddStroke(cursorRing, "White", 1.5)
-    AddCorner(cursorRing, 6)
+    AddCorner(cursorOuter, 7)
+    local outerStroke = Instance.new("UIStroke")
+    outerStroke.Color = Color3.new(1, 1, 1)
+    outerStroke.Thickness = 2
+    outerStroke.Parent = cursorOuter
     local cursorInner = New("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(12, 12), BackgroundTransparency = 1, Parent = cursor,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(14, 14),
+        BackgroundTransparency = 1,
+        Parent = cursor,
     })
-    AddStroke(cursorInner, "Black", 1)
-    AddCorner(cursorInner, 6)
+    AddCorner(cursorInner, 7)
+    local innerStroke = Instance.new("UIStroke")
+    innerStroke.Color = Color3.new(0, 0, 0)
+    innerStroke.Thickness = 1
+    innerStroke.Parent = cursorInner
 
-    -- Hue bar
+    --// hue bar (single gradient, segments non-interactive)
     local hueBar = New("Frame", {
-        Position = UDim2.fromOffset(0, 148), Size = UDim2.new(1, 0, 0, 12), Parent = panel,
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        Position = UDim2.fromOffset(0, 150),
+        Size = UDim2.new(1, 0, 0, 14),
+        Parent = panel,
     })
-    AddCorner(hueBar, 4)
-    -- approximate hue spectrum with segments
-    local hueColors = {
-        Color3.fromRGB(255,0,0), Color3.fromRGB(255,255,0), Color3.fromRGB(0,255,0),
-        Color3.fromRGB(0,255,255), Color3.fromRGB(0,0,255), Color3.fromRGB(255,0,255), Color3.fromRGB(255,0,0),
-    }
-    for i = 1, 6 do
-        local seg = New("Frame", {
-            BackgroundColor3 = hueColors[i],
-            Size = UDim2.new(1/6, 0, 1, 0),
-            Position = UDim2.new((i-1)/6, 0, 0, 0),
-            BorderSizePixel = 0, Parent = hueBar,
-        })
-        local g = Instance.new("UIGradient")
-        g.Color = ColorSequence.new(hueColors[i], hueColors[i+1])
-        g.Parent = seg
-        if i == 1 then
-            New("UICorner", { CornerRadius = UDim.new(0, 4), Parent = seg })
-        elseif i == 6 then
-            New("UICorner", { CornerRadius = UDim.new(0, 4), Parent = seg })
-        end
-    end
+    AddCorner(hueBar, 5)
+    local hueGrad = Instance.new("UIGradient")
+    hueGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+        ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+        ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+        ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+    })
+    hueGrad.Parent = hueBar
+
     local hueKnob = New("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(h, 0, 0.5, 0),
-        Size = UDim2.fromOffset(8, 16), BackgroundColor3 = "White", Parent = hueBar, ZIndex = 5,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(h, 0, 0.5, 0),
+        Size = UDim2.fromOffset(6, 18),
+        BackgroundColor3 = Color3.new(1, 1, 1),
+        ZIndex = 10,
+        Parent = hueBar,
     })
     AddCorner(hueKnob, 3)
-    AddStroke(hueKnob, "Border")
+    local hueKnobStroke = Instance.new("UIStroke")
+    hueKnobStroke.Color = Color3.fromRGB(30, 30, 30)
+    hueKnobStroke.Thickness = 1
+    hueKnobStroke.Parent = hueKnob
 
     -- Hex / HSL / RGB rows
     local function makeColorRow(y, placeholder)
@@ -1638,9 +1639,9 @@ function GroupboxMeta:AddColorPicker(flag, info)
         return tb, copyBtn
     end
 
-    local hexBox, hexCopy = makeColorRow(170, "ffffff")
-    local hslBox, hslCopy = makeColorRow(200, "hsl(0, 0%, 100%)")
-    local rgbBox, rgbCopy = makeColorRow(230, "rgb(255, 255, 255)")
+    local hexBox, hexCopy = makeColorRow(174, "ffffff")
+    local hslBox, hslCopy = makeColorRow(204, "hsl(0, 0%, 100%)")
+    local rgbBox, rgbCopy = makeColorRow(234, "rgb(255, 255, 255)")
 
     local function colorToHex(c)
         return string.format("%02x%02x%02x",
@@ -1786,9 +1787,7 @@ function GroupboxMeta:AddColorPicker(flag, info)
     return el
 end
 
-----------------------------------------------------------------
--- Dependency Groupbox
-----------------------------------------------------------------
+--// Dependency Groupbox
 function GroupboxMeta:AddDependencyGroupbox(info)
     info = info or {}
     local deps = info.Dependencies or {}
@@ -1841,38 +1840,44 @@ function GroupboxMeta:AddDependencyGroupbox(info)
     return depBox
 end
 
-----------------------------------------------------------------
--- Create Groupbox UI
-----------------------------------------------------------------
+--// Create Groupbox
 local function CreateGroupbox(column, name, opts)
     opts = opts or {}
+    local headerH = 34
+
+    --// manual height (no AutomaticSize) so collapse can shrink the holder
     local holder = New("Frame", {
         BackgroundColor3 = "Surface",
-        Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
+        Size = UDim2.new(1, 0, 0, headerH),
+        ClipsDescendants = true,
         Parent = column.Container,
     })
     AddCorner(holder, Library.CornerRadius)
     AddStroke(holder)
 
     local header = New("TextButton", {
-        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 34), Text = "", Parent = holder,
+        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, headerH), Text = "", Parent = holder,
     })
     local titleLabel = New("TextLabel", {
-        Text = name or "Group", Size = UDim2.new(1, -32, 1, 0),
+        Text = name or "Group", Size = UDim2.new(1, -36, 1, 0),
         Position = UDim2.fromOffset(12, 0), TextXAlignment = Enum.TextXAlignment.Left,
         Font = Enum.Font.GothamBold, TextSize = 13, Parent = header,
     })
+
+    --// right chevron: open=90 (down), collapsed=0 (right)
     local chevron = IconImage(header, "ChevronRight", UDim2.fromOffset(12, 12), "SubText")
     chevron.AnchorPoint = Vector2.new(1, 0.5)
     chevron.Position = UDim2.new(1, -12, 0.5, 0)
-    chevron.Rotation = 90 -- pointing down when open
+    chevron.Rotation = 90
 
     local content = New("Frame", {
-        BackgroundTransparency = 1, Position = UDim2.fromOffset(0, 34),
-        Size = UDim2.new(1, 0, 0, 0), ClipsDescendants = true, Parent = holder,
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, headerH),
+        Size = UDim2.new(1, 0, 0, 0),
+        ClipsDescendants = true,
+        Parent = holder,
     })
-    AddPadding(content, 2, 10, 10, 10)
+    AddPadding(content, 4, 12, 10, 12)
     local layout = New("UIListLayout", {
         Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = content,
     })
@@ -1881,7 +1886,7 @@ local function CreateGroupbox(column, name, opts)
         Name = name, Holder = holder, Header = header, TitleLabel = titleLabel,
         Chevron = chevron, Content = content, Layout = layout, Elements = {},
         Collapsed = false, Visible = true, Column = column, Maid = CreateMaid(),
-        _destroyed = false, _heightTween = nil,
+        HeaderHeight = headerH, _destroyed = false, _heightTween = nil, _holderTween = nil,
     }, GroupboxMeta)
 
     layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -1897,9 +1902,7 @@ local function CreateGroupbox(column, name, opts)
     return box
 end
 
-----------------------------------------------------------------
--- COLUMN / TAB
-----------------------------------------------------------------
+--// Column / Tab
 local ColumnMeta = {}
 ColumnMeta.__index = ColumnMeta
 
@@ -1978,9 +1981,7 @@ function TabMeta:Destroy()
     if Library.ActiveTab == self then Library.ActiveTab = nil end
 end
 
-----------------------------------------------------------------
--- WINDOW
-----------------------------------------------------------------
+--// Window
 function Library:CreateWindow(info)
     info = Validate(info or {}, {
         Title = "Aether", Footer = "", Size = UDim2.fromOffset(720, 520),
@@ -2117,7 +2118,7 @@ function Library:CreateWindow(info)
             Visible = false, GroupTransparency = 1, Parent = contentHost,
         })
 
-        -- ★ ONE ScrollingFrame for the whole tab ★
+        --// one ScrollingFrame for the whole tab
         local scroll = New("ScrollingFrame", {
             Size = UDim2.fromScale(1, 1),
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
@@ -2128,30 +2129,29 @@ function Library:CreateWindow(info)
         })
         AddPadding(scroll, 12, 12, 12, 12)
 
+        local gap = 12
         local columnsFrame = New("Frame", {
-            BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y, Parent = scroll,
-        })
-        local columnsLayout = New("UIListLayout", {
-            FillDirection = Enum.FillDirection.Horizontal,
-            HorizontalAlignment = Enum.HorizontalAlignment.Left,
-            VerticalAlignment = Enum.VerticalAlignment.Top,
-            Padding = UDim.new(0, 12),
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            Parent = columnsFrame,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 0),
+            Parent = scroll,
         })
 
+        --// absolute left/right placement (UIListLayout scale is unreliable)
         local leftColFrame = New("Frame", {
-            BackgroundTransparency = 1, Size = UDim2.new(0.5, -6, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 1, Parent = columnsFrame,
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(0, 0),
+            Size = UDim2.new(0.5, -gap / 2, 0, 0),
+            Parent = columnsFrame,
         })
         local leftLayout = New("UIListLayout", {
             Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder, Parent = leftColFrame,
         })
 
         local rightColFrame = New("Frame", {
-            BackgroundTransparency = 1, Size = UDim2.new(0.5, -6, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = 2, Parent = columnsFrame,
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0.5, gap / 2, 0, 0),
+            Size = UDim2.new(0.5, -gap / 2, 0, 0),
+            Parent = columnsFrame,
         })
         local rightLayout = New("UIListLayout", {
             Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder, Parent = rightColFrame,
@@ -2162,24 +2162,50 @@ function Library:CreateWindow(info)
             return main.AbsoluteSize.X < 580
         end
 
-        local function applyColumnLayout()
-            if not leftColFrame or not rightColFrame then return end
+        local function syncColumnsHeight()
+            local lh = leftLayout.AbsoluteContentSize.Y
+            local rh = rightLayout.AbsoluteContentSize.Y
             local stacked = isStacked()
-            columnsLayout.FillDirection = stacked and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal
             if stacked then
-                leftColFrame.Size = UDim2.new(1, 0, 0, 0)
-                rightColFrame.Size = UDim2.new(1, 0, 0, 0)
+                columnsFrame.Size = UDim2.new(1, 0, 0, lh + rh + gap)
             else
-                leftColFrame.Size = UDim2.new(0.5, -6, 0, 0)
-                rightColFrame.Size = UDim2.new(0.5, -6, 0, 0)
+                columnsFrame.Size = UDim2.new(1, 0, 0, math.max(lh, rh))
             end
         end
 
+        local function applyColumnLayout()
+            if not leftColFrame or not rightColFrame then return end
+            local stacked = isStacked()
+            if stacked then
+                leftColFrame.Position = UDim2.fromOffset(0, 0)
+                leftColFrame.Size = UDim2.new(1, 0, 0, 0)
+                rightColFrame.Position = UDim2.new(0, 0, 0, leftLayout.AbsoluteContentSize.Y + gap)
+                rightColFrame.Size = UDim2.new(1, 0, 0, 0)
+            else
+                leftColFrame.Position = UDim2.fromOffset(0, 0)
+                leftColFrame.Size = UDim2.new(0.5, -gap / 2, 0, 0)
+                rightColFrame.Position = UDim2.new(0.5, gap / 2, 0, 0)
+                rightColFrame.Size = UDim2.new(0.5, -gap / 2, 0, 0)
+            end
+            --// grow frames to content
+            leftColFrame.Size = UDim2.new(leftColFrame.Size.X.Scale, leftColFrame.Size.X.Offset, 0, leftLayout.AbsoluteContentSize.Y)
+            rightColFrame.Size = UDim2.new(rightColFrame.Size.X.Scale, rightColFrame.Size.X.Offset, 0, rightLayout.AbsoluteContentSize.Y)
+            if stacked then
+                rightColFrame.Position = UDim2.new(0, 0, 0, leftColFrame.Size.Y.Offset + gap)
+            end
+            syncColumnsHeight()
+        end
+
+        leftLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyColumnLayout)
+        rightLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyColumnLayout)
+
         local leftColumn = setmetatable({
             Container = leftColFrame, Layout = leftLayout, Groupboxes = {}, Side = "Left", Tab = nil,
+            UpdateHeight = applyColumnLayout,
         }, ColumnMeta)
         local rightColumn = setmetatable({
             Container = rightColFrame, Layout = rightLayout, Groupboxes = {}, Side = "Right", Tab = nil,
+            UpdateHeight = applyColumnLayout,
         }, ColumnMeta)
 
         local tab = setmetatable({
@@ -2270,9 +2296,7 @@ function Library:CreateWindow(info)
     return Window
 end
 
-----------------------------------------------------------------
--- SEARCH
-----------------------------------------------------------------
+--// Search
 local function MatchText(text, search)
     if not text or search == "" then return true end
     return string.find(string.lower(tostring(text)), search, 1, true) ~= nil
@@ -2337,9 +2361,7 @@ function Library:UpdateSearch(text)
     end
 end
 
-----------------------------------------------------------------
--- UNLOAD
-----------------------------------------------------------------
+--// Unload
 function Library:Unload()
     Library.Unloaded = true
     for i = #Library.Signals, 1, -1 do
@@ -2362,9 +2384,7 @@ function Library:Unload()
     getgenv().Library = nil
 end
 
-----------------------------------------------------------------
--- Export
-----------------------------------------------------------------
+--// Export
 getgenv().Aether = Library
 getgenv().Library = Library
 return Library
