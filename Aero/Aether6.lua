@@ -11,6 +11,7 @@ local Services = {
     TweenService = game:GetService("TweenService"),
     TextService = game:GetService("TextService"),
     HttpService = game:GetService("HttpService"),
+    GuiService = game:GetService("GuiService"),
 }
 
 local LocalPlayer = Services.Players.LocalPlayer or Services.Players.PlayerAdded:Wait()
@@ -407,7 +408,7 @@ end
 --// ScreenGui
 local ScreenGui = New("ScreenGui", {
     Name = "Aether",
-    DisplayOrder = 1000,
+    DisplayOrder = 2000,
     ResetOnSpawn = false,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 })
@@ -426,6 +427,7 @@ local NotifyArea = New("Frame", {
     Position = UDim2.new(1, -12, 0, 12),
     Size = UDim2.new(0, 300, 1, -24),
     ClipsDescendants = false,
+    ZIndex = 10000,
     Parent = ScreenGui,
 })
 New("UIListLayout", {
@@ -445,22 +447,33 @@ function Library:Notify(text, duration, notifType)
     elseif notifType == "warning" then accentColor = Library.Theme.Warning
     elseif notifType == "error" then accentColor = Library.Theme.Danger end
 
+    --// holder keeps list layout slot; card slides inside it
+    local holder = New("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        ClipsDescendants = false,
+        ZIndex = 10000,
+        Parent = NotifyArea,
+    })
+
     local card = New("Frame", {
         BackgroundColor3 = "Surface",
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         ClipsDescendants = true,
-        Parent = NotifyArea,
+        ZIndex = 10001,
+        Parent = holder,
     })
     AddCorner(card, 8)
     AddStroke(card)
     AddPadding(card, 12, 14, 12, 14)
 
-    -- accent bar on left
     local bar = New("Frame", {
         BackgroundColor3 = accentColor,
         Size = UDim2.new(0, 3, 1, 8),
         Position = UDim2.fromOffset(-10, -4),
+        ZIndex = 10002,
         Parent = card,
     })
     AddCorner(bar, 2)
@@ -471,23 +484,23 @@ function Library:Notify(text, duration, notifType)
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 10002,
         Parent = card,
     })
 
-    --// slide in from off-screen right
-    local slideOffset = 340
+    local slideOffset = 360
     if Library.Animations.Notifications and Library.Animations.Enabled then
         card.Position = UDim2.fromOffset(slideOffset, 0)
         Tween(card, { Position = UDim2.fromOffset(0, 0) }, "Notify")
     end
 
     task.delay(duration, function()
-        if not card.Parent then return end
+        if not holder.Parent then return end
         if Library.Animations.Notifications and Library.Animations.Enabled then
             local t = Tween(card, { Position = UDim2.fromOffset(slideOffset, 0) }, "Notify")
             if t then t.Completed:Wait() end
         end
-        card:Destroy()
+        holder:Destroy()
     end)
 
     return card
@@ -1022,39 +1035,43 @@ function GroupboxMeta:AddSlider(flag, info)
     })
 
     local holder = New("Frame", {
-        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 40), Parent = self.Content,
+        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 48), Parent = self.Content,
     })
     local title = New("TextLabel", {
-        Text = info.Text, Size = UDim2.new(1, -50, 0, 16),
+        Text = info.Text, Size = UDim2.new(1, -56, 0, 16),
         TextXAlignment = Enum.TextXAlignment.Left, TextSize = 12, Parent = holder,
     })
     local valueLabel = New("TextLabel", {
         Text = info.Prefix .. tostring(info.Default) .. info.Suffix,
-        Size = UDim2.new(0, 48, 0, 16), Position = UDim2.new(1, -48, 0, 0),
+        Size = UDim2.new(0, 54, 0, 16), Position = UDim2.new(1, -54, 0, 0),
         TextXAlignment = Enum.TextXAlignment.Right, TextSize = 12, TextColor3 = "SubText", Parent = holder,
     })
 
     local track = New("Frame", {
-        BackgroundColor3 = "Element", Position = UDim2.fromOffset(0, 24),
-        Size = UDim2.new(1, 0, 0, 4), Parent = holder,
+        BackgroundColor3 = "Element", Position = UDim2.fromOffset(0, 28),
+        Size = UDim2.new(1, 0, 0, 6), Parent = holder,
     })
-    AddCorner(track, 2)
+    AddCorner(track, 3)
 
     local fill = New("Frame", {
         BackgroundColor3 = "Accent", Size = UDim2.new(0, 0, 1, 0), Parent = track,
     })
-    AddCorner(fill, 2)
+    AddCorner(fill, 3)
 
-    -- thin rounded pill knob
+    --// pill knob (same style as colorpicker hue knob)
     local knob = New("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
-        BackgroundColor3 = "White",
+        BackgroundColor3 = Color3.new(1, 1, 1),
         Position = UDim2.fromScale(0, 0.5),
-        Size = UDim2.fromOffset(12, 12),
+        Size = UDim2.fromOffset(6, 16),
+        ZIndex = 2,
         Parent = track,
     })
-    AddCorner(knob, 6)
-    AddStroke(knob, "Border", 1)
+    AddCorner(knob, 3)
+    local knobStroke = Instance.new("UIStroke")
+    knobStroke.Color = Color3.fromRGB(30, 30, 30)
+    knobStroke.Thickness = 1
+    knobStroke.Parent = knob
 
     local value = math.clamp(info.Default, info.Min, info.Max)
     local function updateVisual(animate)
@@ -1506,7 +1523,7 @@ function GroupboxMeta:AddColorPicker(flag, info)
     local panelOpen = false
     local panel = New("Frame", {
         BackgroundColor3 = "Surface", Size = UDim2.fromOffset(220, 290),
-        Visible = false, ZIndex = 350, Parent = ScreenGui,
+        Visible = false, ZIndex = 20000, Parent = ScreenGui,
     })
     AddCorner(panel, 10)
     AddStroke(panel)
@@ -1694,8 +1711,15 @@ function GroupboxMeta:AddColorPicker(flag, info)
     local maid = CreateMaid()
     local draggingSV, draggingHue = false, false
 
+    local function guiMouse()
+        local m = Services.UserInputService:GetMouseLocation()
+        local inset = Services.GuiService:GetGuiInset()
+        return Vector2.new(m.X - inset.X, m.Y - inset.Y)
+    end
+
     local function updateSV(pos)
-        local rel = pos - svFrame.AbsolutePosition
+        local p = typeof(pos) == "Vector2" and pos or Vector2.new(pos.X, pos.Y)
+        local rel = p - svFrame.AbsolutePosition
         local size = svFrame.AbsoluteSize
         s = math.clamp(rel.X / math.max(size.X, 1), 0, 1)
         v = 1 - math.clamp(rel.Y / math.max(size.Y, 1), 0, 1)
@@ -1703,19 +1727,25 @@ function GroupboxMeta:AddColorPicker(flag, info)
     end
 
     local function updateHue(pos)
-        local rel = pos.X - hueBar.AbsolutePosition.X
+        local p = typeof(pos) == "Vector2" and pos or Vector2.new(pos.X, pos.Y)
+        local rel = p.X - hueBar.AbsolutePosition.X
         h = math.clamp(rel / math.max(hueBar.AbsoluteSize.X, 1), 0, 1)
         commitColor(true)
     end
 
+    maid:Connect(svHit.MouseButton1Down, function()
+        draggingSV = true
+        updateSV(guiMouse())
+    end)
     maid:Connect(svHit.InputBegan, function(input)
-        if IsClick(input) then
+        if input.UserInputType == Enum.UserInputType.Touch then
             draggingSV = true
             updateSV(input.Position)
         end
     end)
     maid:Connect(hueBar.InputBegan, function(input)
-        if IsClick(input) then
+        local t = input.UserInputType
+        if t == Enum.UserInputType.MouseButton1 or t == Enum.UserInputType.Touch then
             draggingHue = true
             updateHue(input.Position)
         end
@@ -2303,20 +2333,16 @@ function Library:CreateWindow(info)
         local function applyColumnLayout()
             if not leftColFrame or not rightColFrame then return end
 
-            local totalW = scroll.AbsoluteSize.X
-            if totalW < 50 then
-                totalW = math.max(main.AbsoluteSize.X - (info.SidebarWidth or 168) - 30, 320)
-            end
-
             local lh = math.max(leftLayout.AbsoluteContentSize.Y, 0)
             local rh = math.max(rightLayout.AbsoluteContentSize.Y, 0)
-            local colW = math.max(math.floor((totalW - gap) / 2), 80)
+            local halfGap = gap / 2
 
-            leftColFrame.Position = UDim2.fromOffset(0, 0)
-            leftColFrame.Size = UDim2.fromOffset(colW, lh)
-            rightColFrame.Position = UDim2.fromOffset(colW + gap, 0)
-            rightColFrame.Size = UDim2.fromOffset(colW, rh)
-            columnsFrame.Size = UDim2.fromOffset(totalW, math.max(lh, rh))
+            --// scale-based so both columns always fit inside the scroller
+            columnsFrame.Size = UDim2.new(1, 0, 0, math.max(lh, rh, 1))
+            leftColFrame.Position = UDim2.new(0, 0, 0, 0)
+            leftColFrame.Size = UDim2.new(0.5, -halfGap, 0, lh)
+            rightColFrame.Position = UDim2.new(0.5, halfGap, 0, 0)
+            rightColFrame.Size = UDim2.new(0.5, -halfGap, 0, rh)
         end
 
         leftLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(applyColumnLayout)
