@@ -643,6 +643,9 @@ function GroupboxMeta:Resize()
 end
 
 function GroupboxMeta:SetCollapsed(state)
+    if self.Collapsible == false or self.NoHeader then
+        return
+    end
     self.Collapsed = state and true or false
     --// right-chevron: 0 = collapsed (point right), 90 = open (point down)
     if self.Chevron then
@@ -686,25 +689,33 @@ end
 function GroupboxMeta:AddLabel(flagOrText, info)
     local text, flag
     if type(flagOrText) == "table" then
-        info = flagOrText; text = info.Text or "Label"; flag = info.Flag
+        info = flagOrText; text = info.Text or info.Title or "Label"; flag = info.Flag
     elseif type(info) == "table" then
-        flag = flagOrText; text = info.Text or tostring(flagOrText)
+        flag = flagOrText; text = info.Text or info.Title or tostring(flagOrText)
     else
         text = tostring(flagOrText)
+        info = {}
     end
     info = info or {}
 
-    local holder = CreateElementShell(self.Content, 20)
+    local size = info.TextSize or 12
+    local holder = CreateElementShell(self.Content, size + 8)
     local label = New("TextLabel", {
-        Text = text, Size = UDim2.fromScale(1, 1),
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = info.Color and nil or "SubText",
-        TextSize = info.TextSize or 12, Parent = holder,
+        Text = text,
+        Size = UDim2.fromScale(1, 1),
+        TextXAlignment = info.Center and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left,
+        TextColor3 = "SubText",
+        TextSize = size,
+        TextWrapped = info.Wrapped == true,
+        RichText = info.RichText ~= false,
+        Parent = holder,
     })
     if info.Color then label.TextColor3 = info.Color end
+    if info.Font then label.Font = info.Font end
 
     local el = { Type = "Label", Holder = holder, Label = label, Visible = true, Text = text, ParentBox = self }
-    function el:SetText(t) self.Text = t; label.Text = t end
+    function el:SetText(t) self.Text = t; label.Text = t; self.ParentBox:Resize() end
+    function el:SetColor(c) label.TextColor3 = c end
     function el:SetVisible(v) self.Visible = v ~= false; ApplyElementVisibility(holder, self.Visible); self.ParentBox:Resize() end
     function el:Destroy()
         holder:Destroy()
@@ -736,23 +747,141 @@ function GroupboxMeta:AddDivider()
     return el
 end
 
+function GroupboxMeta:Space(length)
+    length = tonumber(length) or 8
+    local holder = New("Frame", {
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, length),
+        Parent = self.Content,
+    })
+    local el = { Type = "Space", Holder = holder, Visible = true, ParentBox = self, Length = length }
+    function el:SetLength(n)
+        self.Length = tonumber(n) or 8
+        holder.Size = UDim2.new(1, 0, 0, self.Length)
+        self.ParentBox:Resize()
+    end
+    function el:SetVisible(v) self.Visible = v ~= false; ApplyElementVisibility(holder, self.Visible); self.ParentBox:Resize() end
+    function el:Destroy()
+        holder:Destroy()
+        local i = table.find(self.ParentBox.Elements, self)
+        if i then table.remove(self.ParentBox.Elements, i) end
+        self.ParentBox:Resize()
+    end
+    table.insert(self.Elements, el)
+    self:Resize()
+    return el
+end
+GroupboxMeta.AddSpace = GroupboxMeta.Space
+
 function GroupboxMeta:AddParagraph(flagOrText, info)
-    local text
-    if type(flagOrText) == "table" then info = flagOrText; text = info.Text or ""
-    else text = tostring(flagOrText); info = info or {} end
+    if type(flagOrText) == "table" then
+        info = flagOrText
+    else
+        info = info or {}
+        if info.Title == nil and info.Desc == nil and info.Text == nil then
+            info.Desc = tostring(flagOrText)
+        end
+    end
+    info = Validate(info, {
+        Title = nil,
+        Desc = nil,
+        Text = nil,
+        TitleSize = 13,
+        DescSize = 12,
+        TitleColor = nil,
+        DescColor = nil,
+        Visible = true,
+    })
+
+    local titleText = info.Title
+    local descText = info.Desc or info.Text or ""
 
     local holder = New("Frame", {
-        BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y, Parent = self.Content,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        Parent = self.Content,
     })
-    New("TextLabel", {
-        Text = text, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
-        TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = "SubText", TextSize = 12, Parent = holder,
+    local list = New("UIListLayout", {
+        Padding = UDim.new(0, 4),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = holder,
     })
-    local el = { Type = "Paragraph", Holder = holder, Text = text, Visible = true, ParentBox = self }
-    function el:SetText(t) self.Text = t; holder:FindFirstChildWhichIsA("TextLabel").Text = t; self.ParentBox:Resize() end
-    function el:SetVisible(v) self.Visible = v ~= false; ApplyElementVisibility(holder, self.Visible); self.ParentBox:Resize() end
+
+    local titleLabel = nil
+    if titleText and tostring(titleText) ~= "" then
+        titleLabel = New("TextLabel", {
+            Text = tostring(titleText),
+            Size = UDim2.new(1, 0, 0, info.TitleSize + 2),
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Font = Enum.Font.GothamBold,
+            TextSize = info.TitleSize,
+            TextColor3 = "Text",
+            TextWrapped = true,
+            LayoutOrder = 1,
+            Parent = holder,
+        })
+        if info.TitleColor then titleLabel.TextColor3 = info.TitleColor end
+    end
+
+    local descLabel = nil
+    if descText and tostring(descText) ~= "" then
+        descLabel = New("TextLabel", {
+            Text = tostring(descText),
+            Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            TextColor3 = "SubText",
+            TextSize = info.DescSize,
+            TextWrapped = true,
+            LayoutOrder = 2,
+            Parent = holder,
+        })
+        if info.DescColor then descLabel.TextColor3 = info.DescColor end
+    end
+
+    local function measure()
+        local h = 0
+        if titleLabel then h += titleLabel.TextSize + 4 end
+        if descLabel then
+            local _, dy = GetTextSize(descLabel.Text, Font.fromEnum(Enum.Font.Gotham), info.DescSize, math.max(holder.AbsoluteSize.X, 200))
+            -- fallback estimate
+            local lines = 1
+            for _ in string.gmatch(descLabel.Text, "
+") do lines += 1 end
+            local est = math.max(dy, lines * (info.DescSize + 4), info.DescSize + 4)
+            h += est
+        end
+        holder.Size = UDim2.new(1, 0, 0, math.max(h, 8))
+    end
+    measure()
+    list:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        holder.Size = UDim2.new(1, 0, 0, math.max(list.AbsoluteContentSize.Y, 8))
+        self:Resize()
+    end)
+
+    local el = {
+        Type = "Paragraph", Holder = holder, TitleLabel = titleLabel, DescLabel = descLabel,
+        Title = titleText, Desc = descText, Visible = info.Visible, ParentBox = self,
+    }
+    function el:SetTitle(t)
+        self.Title = t
+        if titleLabel then titleLabel.Text = tostring(t or "") end
+        self.ParentBox:Resize()
+    end
+    function el:SetDesc(t)
+        self.Desc = t
+        if descLabel then descLabel.Text = tostring(t or "") end
+        self.ParentBox:Resize()
+    end
+    function el:SetText(t)
+        self:SetDesc(t)
+    end
+    function el:SetVisible(v)
+        self.Visible = v ~= false
+        ApplyElementVisibility(holder, self.Visible)
+        self.ParentBox:Resize()
+    end
     function el:Destroy()
         holder:Destroy()
         local i = table.find(self.ParentBox.Elements, self)
@@ -1893,26 +2022,87 @@ end
 
 --// Nested section inside a groupbox (mainly for full-side boxes)
 function GroupboxMeta:GroupBoxSection(sideOrText, text)
+    --// GroupBoxSection(1|2|"Left"|"Right", text?) or GroupBoxSection(text) for full width
     local side, title
-    if type(sideOrText) == "string" and text ~= nil then
-        side = string.lower(sideOrText)
+    if text ~= nil then
+        side = sideOrText
         title = text
+    elseif type(sideOrText) == "number" then
+        side = sideOrText
+        title = nil
     else
         side = "full"
         title = sideOrText
     end
 
+    local sideN = 0
+    if side == 1 or side == "1" or (type(side) == "string" and string.lower(side) == "left") then
+        sideN = 1
+    elseif side == 2 or side == "2" or (type(side) == "string" and string.lower(side) == "right") then
+        sideN = 2
+    end
+
+    local parentContent = self.Content
+    local nestParent = parentContent
+    local gap = 8
+
+    --// dual-column host inside THIS groupbox (not outside)
+    if sideN == 1 or sideN == 2 then
+        if not self._sectionRow then
+            local row = New("Frame", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                Parent = parentContent,
+            })
+            local left = New("Frame", {
+                BackgroundTransparency = 1,
+                Position = UDim2.fromOffset(0, 0),
+                Size = UDim2.new(0.5, -gap / 2, 0, 0),
+                Parent = row,
+            })
+            local right = New("Frame", {
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0.5, gap / 2, 0, 0),
+                Size = UDim2.new(0.5, -gap / 2, 0, 0),
+                Parent = row,
+            })
+            local function syncRow()
+                local lh, rh = 0, 0
+                for _, c in ipairs(left:GetChildren()) do
+                    if c:IsA("GuiObject") then lh = math.max(lh, c.AbsoluteSize.Y) end
+                end
+                for _, c in ipairs(right:GetChildren()) do
+                    if c:IsA("GuiObject") then rh = math.max(rh, c.AbsoluteSize.Y) end
+                end
+                -- use layout content sizes if present via stored refs
+                if self._sectionLeftH then lh = math.max(lh, self._sectionLeftH) end
+                if self._sectionRightH then rh = math.max(rh, self._sectionRightH) end
+                local h = math.max(lh, rh, 0)
+                left.Size = UDim2.new(0.5, -gap / 2, 0, h)
+                right.Size = UDim2.new(0.5, -gap / 2, 0, h)
+                row.Size = UDim2.new(1, 0, 0, h)
+                self:Resize()
+            end
+            self._sectionRow = row
+            self._sectionLeft = left
+            self._sectionRight = right
+            self._sectionSync = syncRow
+            table.insert(self.Elements, { Type = "SectionRow", Holder = row, Visible = true, ParentBox = self })
+        end
+        nestParent = (sideN == 1) and self._sectionLeft or self._sectionRight
+    end
+
     local nestHolder = New("Frame", {
         BackgroundColor3 = "Element",
-        BackgroundTransparency = 0.35,
+        BackgroundTransparency = 0.4,
         Size = UDim2.new(1, 0, 0, 0),
         ClipsDescendants = true,
-        Parent = self.Content,
+        Parent = nestParent,
     })
     AddCorner(nestHolder, 6)
     AddStroke(nestHolder)
 
-    local nestHeaderH = (title and tostring(title) ~= "") and 28 or 0
+    local nestHeaderH = (title and tostring(title) ~= "") and 26 or 0
     local nestHeader = nil
     if nestHeaderH > 0 then
         nestHeader = New("TextLabel", {
@@ -1933,7 +2123,7 @@ function GroupboxMeta:GroupBoxSection(sideOrText, text)
         Size = UDim2.new(1, 0, 0, 0),
         Parent = nestHolder,
     })
-    AddPadding(nestContent, 6, 10, 8, 10)
+    AddPadding(nestContent, 6, 8, 8, 8)
     local nestLayout = New("UIListLayout", {
         Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = nestContent,
     })
@@ -1955,22 +2145,36 @@ function GroupboxMeta:GroupBoxSection(sideOrText, text)
         HeaderHeight = nestHeaderH,
         NoHeader = nestHeaderH == 0,
         Variant = 2,
+        Side = sideN,
         _destroyed = false,
     }, GroupboxMeta)
 
     function nestBox:Resize()
         if self._destroyed then return end
-        local target = math.max(self.Layout.AbsoluteContentSize.Y + 12, 0)
+        local target = math.max(self.Layout.AbsoluteContentSize.Y + 10, 0)
         self.Content.Size = UDim2.new(1, 0, 0, target)
-        self.Holder.Size = UDim2.new(1, 0, 0, self.HeaderHeight + target)
-        if self.ParentBox then self.ParentBox:Resize() end
+        local total = self.HeaderHeight + target
+        self.Holder.Size = UDim2.new(1, 0, 0, total)
+        if self.Side == 1 then
+            self.ParentBox._sectionLeftH = total
+        elseif self.Side == 2 then
+            self.ParentBox._sectionRightH = total
+        end
+        if self.ParentBox._sectionSync then
+            self.ParentBox._sectionSync()
+        end
+        if self.ParentBox.Resize then
+            self.ParentBox:Resize()
+        end
     end
 
     nestLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         nestBox:Resize()
     end)
 
-    table.insert(self.Elements, nestBox)
+    if sideN == 0 then
+        table.insert(self.Elements, nestBox)
+    end
     task.defer(function() nestBox:Resize() end)
     return nestBox
 end
@@ -1980,6 +2184,17 @@ local function CreateGroupbox(column, name, opts)
     opts = opts or {}
     local variant = tonumber(opts.Variant) or 1
     local noHeader = variant == 2 or opts.NoHeader == true
+    local collapsible = opts.Collapsible
+    if collapsible == nil then
+        collapsible = not noHeader
+    end
+    --// Collapsible full/headerless box still needs a header strip
+    if noHeader and collapsible == true then
+        noHeader = false
+    end
+    if collapsible == false then
+        noHeader = noHeader or (variant == 2)
+    end
     local headerH = noHeader and 0 or 34
     local transparency = opts.Transparency
     if transparency == nil then transparency = 0 end
@@ -2036,10 +2251,13 @@ local function CreateGroupbox(column, name, opts)
         if not box.Collapsed then box:Resize() end
     end)
 
-    if header then
+    box.Collapsible = collapsible ~= false and header ~= nil
+    if header and box.Collapsible then
         box.Maid:Connect(header.MouseButton1Click, function()
             box:ToggleCollapse()
         end)
+    elseif header and chevron then
+        chevron.Visible = false
     end
 
     task.defer(function() box:Resize() end)
