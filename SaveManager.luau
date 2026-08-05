@@ -1,138 +1,215 @@
 local HttpService = game:GetService("HttpService")
 
 local SaveManager = {
-    Folder = "SaveManager",
+	Folder = "SaveManager",
 }
 
+local function SplitPath(Path)
+	local Parts = {}
+	for Part in string.gmatch(Path, "[^/\\]+") do
+		table.insert(Parts, Part)
+	end
+	return Parts
+end
+
+function SaveManager:EnsureFolder(Path)
+	if not Path or Path == "" then
+		return true
+	end
+
+	local Parts = SplitPath(Path)
+	local Current = self.Folder
+
+	if not isfolder(Current) then
+		makefolder(Current)
+	end
+
+	for _, Part in ipairs(Parts) do
+		Current = Current .. "/" .. Part
+		if not isfolder(Current) then
+			makefolder(Current)
+		end
+	end
+
+	return true
+end
+
 function SaveManager:BuildFolderTree()
-    if not isfolder(self.Folder) then
-        makefolder(self.Folder)
-    end
+	if not isfolder(self.Folder) then
+		makefolder(self.Folder)
+	end
 end
 
-function SaveManager:Set(file, pathOrData, value)
-    if type(file) ~= "string" then
-        return false
-    end
-
-    if not file:find("%.json$") then
-        file = file .. ".json"
-    end
-
-    self:BuildFolderTree()
-    local fullPath = self.Folder .. "/" .. file
-
-    if type(pathOrData) == "table" and value == nil then
-        local success, encoded = pcall(HttpService.JSONEncode, HttpService, pathOrData)
-        if not success then
-            return false
-        end
-        writefile(fullPath, encoded)
-        return true
-    end
-
-    local data = {}
-    if isfile(fullPath) then
-        local success, decoded = pcall(function()
-            return HttpService:JSONDecode(readfile(fullPath))
-        end)
-        if success and type(decoded) == "table" then
-            data = decoded
-        end
-    end
-
-    if type(pathOrData) == "string" then
-        local keys = string.split(pathOrData, ".")
-        local current = data
-        for i = 1, #keys - 1 do
-            local k = keys[i]
-            if type(current[k]) ~= "table" then
-                current[k] = {}
-            end
-            current = current[k]
-        end
-        current[keys[#keys]] = value
-    end
-
-    local success, encoded = pcall(HttpService.JSONEncode, HttpService, data)
-    if not success then
-        return false
-    end
-    writefile(fullPath, encoded)
-    return true
+function SaveManager:SetFolder(Folder)
+	self.Folder = Folder or "SaveManager"
+	self:BuildFolderTree()
 end
 
-function SaveManager:Get(file, path, default)
-    if type(file) ~= "string" then
-        return default
-    end
+function SaveManager:Set(File, PathOrData, Value)
+	if type(File) ~= "string" then
+		return false
+	end
 
-    if not file:find("%.json$") then
-        file = file .. ".json"
-    end
+	if not File:find("%.json$") then
+		File = File .. ".json"
+	end
 
-    local fullPath = self.Folder .. "/" .. file
-    if not isfile(fullPath) then
-        return default
-    end
+	local FullPath = self.Folder .. "/" .. File
+	local FolderPart = FullPath:match("(.+)/[^/]+$")
 
-    local success, data = pcall(function()
-        return HttpService:JSONDecode(readfile(fullPath))
-    end)
+	if FolderPart then
+		self:EnsureFolder(FolderPart:gsub("^" .. self.Folder .. "/?", ""))
+	else
+		self:BuildFolderTree()
+	end
 
-    if not success or type(data) ~= "table" then
-        return default
-    end
+	if type(PathOrData) == "table" and Value == nil then
+		local Success, Encoded = pcall(HttpService.JSONEncode, HttpService, PathOrData)
+		if not Success then
+			return false
+		end
+		writefile(FullPath, Encoded)
+		return true
+	end
 
-    if not path or path == "" then
-        return data
-    end
+	local Data = {}
+	if isfile(FullPath) then
+		local Success, Decoded = pcall(function()
+			return HttpService:JSONDecode(readfile(FullPath))
+		end)
+		if Success and type(Decoded) == "table" then
+			Data = Decoded
+		end
+	end
 
-    local keys = string.split(path, ".")
-    local current = data
-    for _, k in ipairs(keys) do
-        if type(current) ~= "table" or current[k] == nil then
-            return default
-        end
-        current = current[k]
-    end
+	if type(PathOrData) == "string" then
+		local Keys = string.split(PathOrData, ".")
+		local Current = Data
+		for i = 1, #Keys - 1 do
+			local Key = Keys[i]
+			if type(Current[Key]) ~= "table" then
+				Current[Key] = {}
+			end
+			Current = Current[Key]
+		end
+		Current[Keys[#Keys]] = Value
+	end
 
-    return current
+	local Success, Encoded = pcall(HttpService.JSONEncode, HttpService, Data)
+	if not Success then
+		return false
+	end
+
+	writefile(FullPath, Encoded)
+	return true
 end
 
-function SaveManager:Delete(file)
-    if type(file) ~= "string" then
-        return false
-    end
+function SaveManager:Get(File, Path, Default)
+	if type(File) ~= "string" then
+		return Default
+	end
 
-    if not file:find("%.json$") then
-        file = file .. ".json"
-    end
+	if not File:find("%.json$") then
+		File = File .. ".json"
+	end
 
-    local fullPath = self.Folder .. "/" .. file
-    if isfile(fullPath) then
-        delfile(fullPath)
-        return true
-    end
-    return false
+	local FullPath = self.Folder .. "/" .. File
+	if not isfile(FullPath) then
+		return Default
+	end
+
+	local Success, Data = pcall(function()
+		return HttpService:JSONDecode(readfile(FullPath))
+	end)
+
+	if not Success or type(Data) ~= "table" then
+		return Default
+	end
+
+	if not Path or Path == "" then
+		return Data
+	end
+
+	local Keys = string.split(Path, ".")
+	local Current = Data
+	for _, Key in ipairs(Keys) do
+		if type(Current) ~= "table" or Current[Key] == nil then
+			return Default
+		end
+		Current = Current[Key]
+	end
+
+	return Current
 end
 
-function SaveManager:List()
-    self:BuildFolderTree()
-    local files = {}
-    for _, file in ipairs(listfiles(self.Folder) or {}) do
-        local name = file:match("([^/\\]+)%.json$")
-        if name then
-            table.insert(files, name)
-        end
-    end
-    table.sort(files)
-    return files
+function SaveManager:Delete(File)
+	if type(File) ~= "string" then
+		return false
+	end
+
+	if not File:find("%.json$") then
+		File = File .. ".json"
+	end
+
+	local FullPath = self.Folder .. "/" .. File
+	if isfile(FullPath) then
+		delfile(FullPath)
+		return true
+	end
+	return false
 end
 
-function SaveManager:SetFolder(folder)
-    self.Folder = folder or "SaveManager"
-    self:BuildFolderTree()
+function SaveManager:CreateFolder(Name)
+	if type(Name) ~= "string" or Name == "" then
+		return false
+	end
+	return self:EnsureFolder(Name)
+end
+
+function SaveManager:DeleteFolder(Name)
+	if type(Name) ~= "string" or Name == "" then
+		return false
+	end
+
+	local Path = self.Folder .. "/" .. Name
+	if isfolder(Path) then
+		delfolder(Path)
+		return true
+	end
+	return false
+end
+
+function SaveManager:List(Folder)
+	Folder = Folder or ""
+	local Target = Folder == "" and self.Folder or (self.Folder .. "/" .. Folder)
+
+	if not isfolder(Target) then
+		return {}, {}
+	end
+
+	local Files, Folders = {}, {}
+
+	for _, Item in ipairs(listfiles(Target) or {}) do
+		local Name = Item:match("([^/\\]+)$")
+		if isfolder(Item) then
+			table.insert(Folders, Name)
+		elseif Name:find("%.json$") then
+			table.insert(Files, Name:gsub("%.json$", ""))
+		end
+	end
+
+	table.sort(Files)
+	table.sort(Folders)
+	return Files, Folders
+end
+
+function SaveManager:Exists(Path)
+	if type(Path) ~= "string" then
+		return false
+	end
+
+	local Full = self.Folder .. "/" .. Path
+	return isfile(Full) or isfolder(Full)
 end
 
 return SaveManager
