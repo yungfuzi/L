@@ -18,7 +18,6 @@ local Services = {
 }
 
 local LocalPlayer = Services.Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 
 --@ Utility
 local Utility = {}
@@ -44,7 +43,18 @@ function Utility.Create(class, props, children)
 end
 
 function Utility.Tween(obj, props, info)
-    info = info or TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    if Library and Library.Animations and Library.Animations.Enabled == false then
+        for k, v in pairs(props) do
+            obj[k] = v
+        end
+        return nil
+    end
+    local anim = (Library and Library.Animations) or {}
+    info = info or TweenInfo.new(
+        anim.Duration or 0.18,
+        anim.Style or Enum.EasingStyle.Quart,
+        anim.Direction or Enum.EasingDirection.Out
+    )
     local tween = Services.TweenService:Create(obj, info, props)
     tween:Play()
     return tween
@@ -183,6 +193,18 @@ local Library = {
         Settings = "rbxassetid://106205298246017",
         MoreHorizontal = "rbxassetid://101330725759187",
         MoreVertical = "rbxassetid://76302166494262",
+    },
+    Animations = {
+        Enabled = true,
+        Duration = 0.18,
+        Style = Enum.EasingStyle.Quart,
+        Direction = Enum.EasingDirection.Out,
+        Fast = TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        Normal = TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        Slow = TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        TabSwitch = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        Toggle = TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+        Dropdown = TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
     },
 }
 
@@ -360,13 +382,20 @@ function BaseElement:Destroy()
     end
 end
 
+local function getContentParent(container)
+    if container._content then
+        return container._content
+    end
+    return container
+end
+
 --@ Toggle
 local Toggle = setmetatable({}, { __index = BaseElement })
 Toggle.__index = Toggle
 
-function Toggle.new(groupbox, text, config)
+function Toggle.new(container, text, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), Toggle)
+    local self = setmetatable(BaseElement.new(container, config), Toggle)
     self._text = text
     self._flag = config.Flag
     self._default = config.Default == true
@@ -374,13 +403,14 @@ function Toggle.new(groupbox, text, config)
     self._callback = config.Callback
 
     local theme = Library:GetTheme()
-    local height = 32
+    local parent = getContentParent(container)
+    local height = config.Description and 36 or 32
 
     self._frame = Utility.Create("Frame", {
         Name = "Toggle",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, height),
-        Parent = groupbox._content,
+        Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
@@ -413,7 +443,6 @@ function Toggle.new(groupbox, text, config)
             Parent = self._frame,
         })
         Library:RegisterTheme(self._desc, { TextColor3 = "TextSecondary" })
-        self._frame.Size = UDim2.new(1, 0, 0, 36)
     end
 
     self._box = Utility.Create("Frame", {
@@ -424,7 +453,6 @@ function Toggle.new(groupbox, text, config)
         Parent = self._frame,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = self._box })
-    Library:RegisterTheme(self._box, { BackgroundColor3 = self._value and "ToggleOn" or "ToggleOff" })
 
     self._knob = Utility.Create("Frame", {
         Name = "Knob",
@@ -461,10 +489,11 @@ function Toggle:SetValue(value, silent)
     value = value == true
     self._value = value
     local theme = Library:GetTheme()
-    Utility.Tween(self._box, { BackgroundColor3 = value and theme.ToggleOn or theme.ToggleOff }, TweenInfo.new(0.15))
+    local info = Library.Animations.Toggle
+    Utility.Tween(self._box, { BackgroundColor3 = value and theme.ToggleOn or theme.ToggleOff }, info)
     Utility.Tween(self._knob, {
         Position = value and UDim2.new(1, -18, 0.5, -8) or UDim2.fromOffset(2, 2),
-    }, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out))
+    }, info)
     if self._flag then
         Library.Flags[self._flag] = value
     end
@@ -485,20 +514,20 @@ end
 local Button = setmetatable({}, { __index = BaseElement })
 Button.__index = Button
 
-function Button.new(groupbox, text, config)
+function Button.new(container, text, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), Button)
+    local self = setmetatable(BaseElement.new(container, config), Button)
     self._text = text
     self._callback = config.Callback
 
     local theme = Library:GetTheme()
-    local height = 32
+    local parent = getContentParent(container)
 
     self._frame = Utility.Create("Frame", {
         Name = "Button",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, height),
-        Parent = groupbox._content,
+        Size = UDim2.new(1, 0, 0, 32),
+        Parent = parent,
     })
 
     self._btn = Utility.Create("TextButton", {
@@ -515,12 +544,13 @@ function Button.new(groupbox, text, config)
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = self._btn })
     Library:RegisterTheme(self._btn, { BackgroundColor3 = "SurfaceSecondary", TextColor3 = "Text" })
 
+    local fast = Library.Animations.Fast
     self._connections:Add(self._btn.MouseEnter:Connect(function()
         if self._disabled then return end
-        Utility.Tween(self._btn, { BackgroundColor3 = theme.Border }, TweenInfo.new(0.12))
+        Utility.Tween(self._btn, { BackgroundColor3 = theme.Border }, fast)
     end))
     self._connections:Add(self._btn.MouseLeave:Connect(function()
-        Utility.Tween(self._btn, { BackgroundColor3 = theme.SurfaceSecondary }, TweenInfo.new(0.12))
+        Utility.Tween(self._btn, { BackgroundColor3 = theme.SurfaceSecondary }, fast)
     end))
     self._connections:Add(self._btn.MouseButton1Click:Connect(function()
         if self._disabled or self._destroyed then return end
@@ -545,9 +575,9 @@ end
 local Slider = setmetatable({}, { __index = BaseElement })
 Slider.__index = Slider
 
-function Slider.new(groupbox, text, config)
+function Slider.new(container, text, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), Slider)
+    local self = setmetatable(BaseElement.new(container, config), Slider)
     self._text = text
     self._flag = config.Flag
     self._min = config.Min or 0
@@ -558,20 +588,22 @@ function Slider.new(groupbox, text, config)
     self._suffix = config.Suffix or ""
     self._prefix = config.Prefix or ""
     self._callback = config.Callback
+    self._editing = false
 
     local theme = Library:GetTheme()
+    local parent = getContentParent(container)
 
     self._frame = Utility.Create("Frame", {
         Name = "Slider",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 48),
-        Parent = groupbox._content,
+        Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
         Name = "Label",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -60, 0, 16),
+        Size = UDim2.new(1, -70, 0, 16),
         Position = UDim2.fromOffset(0, 0),
         Font = Enum.Font.GothamMedium,
         Text = text,
@@ -582,19 +614,22 @@ function Slider.new(groupbox, text, config)
     })
     Library:RegisterTheme(self._label, { TextColor3 = "Text" })
 
-    self._valueLabel = Utility.Create("TextLabel", {
+    self._valueBox = Utility.Create("TextBox", {
         Name = "Value",
+        BackgroundColor3 = theme.InputBackground,
         BackgroundTransparency = 1,
-        Size = UDim2.fromOffset(56, 16),
-        Position = UDim2.new(1, -56, 0, 0),
+        Size = UDim2.fromOffset(64, 18),
+        Position = UDim2.new(1, -64, 0, -1),
         Font = Enum.Font.Gotham,
         Text = self._prefix .. tostring(self._value) .. self._suffix,
         TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Right,
         TextColor3 = theme.TextSecondary,
+        ClearTextOnFocus = false,
         Parent = self._frame,
     })
-    Library:RegisterTheme(self._valueLabel, { TextColor3 = "TextSecondary" })
+    Utility.Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = self._valueBox })
+    Library:RegisterTheme(self._valueBox, { TextColor3 = "TextSecondary" })
 
     self._track = Utility.Create("Frame", {
         Name = "Track",
@@ -626,14 +661,14 @@ function Slider.new(groupbox, text, config)
 
     local dragging = false
     local function updateFromX(x)
-        local rel = math.clamp((x - self._track.AbsolutePosition.X) / self._track.AbsoluteSize.X, 0, 1)
+        local rel = math.clamp((x - self._track.AbsolutePosition.X) / math.max(self._track.AbsoluteSize.X, 1), 0, 1)
         local raw = self._min + (self._max - self._min) * rel
         local val = Utility.Round(raw, self._rounding)
         self:SetValue(val)
     end
 
     self._connections:Add(self._track.InputBegan:Connect(function(input)
-        if self._disabled or self._destroyed then return end
+        if self._disabled or self._destroyed or self._editing then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             updateFromX(input.Position.X)
@@ -648,6 +683,28 @@ function Slider.new(groupbox, text, config)
     self._connections:Add(Services.UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = false
+        end
+    end))
+
+    self._connections:Add(self._valueBox.Focused:Connect(function()
+        if self._disabled or self._destroyed then return end
+        self._editing = true
+        self._valueBox.BackgroundTransparency = 0
+        self._valueBox.Text = tostring(self._value)
+        self._valueBox.TextXAlignment = Enum.TextXAlignment.Center
+        self._valueBox.TextColor3 = theme.Text
+    end))
+
+    self._connections:Add(self._valueBox.FocusLost:Connect(function(enter)
+        self._editing = false
+        self._valueBox.BackgroundTransparency = 1
+        self._valueBox.TextXAlignment = Enum.TextXAlignment.Right
+        self._valueBox.TextColor3 = theme.TextSecondary
+        local n = tonumber(self._valueBox.Text)
+        if n then
+            self:SetValue(n)
+        else
+            self._valueBox.Text = self._prefix .. tostring(self._value) .. self._suffix
         end
     end))
 
@@ -667,7 +724,9 @@ function Slider:SetValue(value, silent)
     local pct = (self._max == self._min) and 0 or (value - self._min) / (self._max - self._min)
     self._fill.Size = UDim2.new(pct, 0, 1, 0)
     self._knob.Position = UDim2.new(pct, -7, 0.5, -7)
-    self._valueLabel.Text = self._prefix .. tostring(value) .. self._suffix
+    if not self._editing then
+        self._valueBox.Text = self._prefix .. tostring(value) .. self._suffix
+    end
     if self._flag then
         Library.Flags[self._flag] = value
     end
@@ -688,9 +747,9 @@ end
 local Dropdown = setmetatable({}, { __index = BaseElement })
 Dropdown.__index = Dropdown
 
-function Dropdown.new(groupbox, text, config)
+function Dropdown.new(container, text, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), Dropdown)
+    local self = setmetatable(BaseElement.new(container, config), Dropdown)
     self._text = text
     self._flag = config.Flag
     self._values = config.Values or {}
@@ -711,13 +770,14 @@ function Dropdown.new(groupbox, text, config)
     end
 
     local theme = Library:GetTheme()
+    local parent = getContentParent(container)
 
     self._frame = Utility.Create("Frame", {
         Name = "Dropdown",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 52),
         ClipsDescendants = false,
-        Parent = groupbox._content,
+        Parent = parent,
         ZIndex = 5,
     })
 
@@ -778,7 +838,7 @@ function Dropdown.new(groupbox, text, config)
     Utility.Create("UIStroke", { Color = theme.Border, Thickness = 1, Parent = self._list })
     Library:RegisterTheme(self._list, { BackgroundColor3 = "Surface" })
 
-    self._listLayout = Utility.Create("UIListLayout", {
+    Utility.Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
         Padding = UDim.new(0, 2),
         Parent = self._list,
@@ -987,9 +1047,9 @@ end
 local Input = setmetatable({}, { __index = BaseElement })
 Input.__index = Input
 
-function Input.new(groupbox, text, config)
+function Input.new(container, text, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), Input)
+    local self = setmetatable(BaseElement.new(container, config), Input)
     self._text = text
     self._flag = config.Flag
     self._default = config.Default or ""
@@ -1000,12 +1060,13 @@ function Input.new(groupbox, text, config)
     self._finished = config.Finished
 
     local theme = Library:GetTheme()
+    local parent = getContentParent(container)
 
     self._frame = Utility.Create("Frame", {
         Name = "Input",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 52),
-        Parent = groupbox._content,
+        Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
@@ -1055,20 +1116,20 @@ function Input.new(groupbox, text, config)
     end
 
     self._connections:Add(self._box.FocusLost:Connect(function(enter)
-        local text = self._box.Text
+        local textVal = self._box.Text
         if self._numeric then
-            local n = tonumber(text)
+            local n = tonumber(textVal)
             if n then
-                text = tostring(n)
-                self._box.Text = text
+                textVal = tostring(n)
+                self._box.Text = textVal
             else
                 self._box.Text = self._value
                 return
             end
         end
-        self:SetValue(text)
+        self:SetValue(textVal)
         if self._finished and enter then
-            task.spawn(self._finished, text)
+            task.spawn(self._finished, textVal)
         end
     end))
 
@@ -1104,18 +1165,19 @@ end
 local Label = setmetatable({}, { __index = BaseElement })
 Label.__index = Label
 
-function Label.new(groupbox, text, config)
+function Label.new(container, text, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), Label)
+    local self = setmetatable(BaseElement.new(container, config), Label)
     self._text = text
 
     local theme = Library:GetTheme()
+    local parent = getContentParent(container)
 
     self._frame = Utility.Create("Frame", {
         Name = "Label",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 22),
-        Parent = groupbox._content,
+        Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
@@ -1147,16 +1209,17 @@ end
 local Divider = setmetatable({}, { __index = BaseElement })
 Divider.__index = Divider
 
-function Divider.new(groupbox, config)
+function Divider.new(container, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), Divider)
+    local self = setmetatable(BaseElement.new(container, config), Divider)
     local theme = Library:GetTheme()
+    local parent = getContentParent(container)
 
     self._frame = Utility.Create("Frame", {
         Name = "Divider",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 12),
-        Parent = groupbox._content,
+        Parent = parent,
     })
 
     self._line = Utility.Create("Frame", {
@@ -1175,9 +1238,9 @@ end
 local Keybind = setmetatable({}, { __index = BaseElement })
 Keybind.__index = Keybind
 
-function Keybind.new(groupbox, text, config)
+function Keybind.new(container, text, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), Keybind)
+    local self = setmetatable(BaseElement.new(container, config), Keybind)
     self._text = text
     self._flag = config.Flag
     self._default = config.Default or Enum.KeyCode.Unknown
@@ -1187,12 +1250,13 @@ function Keybind.new(groupbox, text, config)
     self._listening = false
 
     local theme = Library:GetTheme()
+    local parent = getContentParent(container)
 
     self._frame = Utility.Create("Frame", {
         Name = "Keybind",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 32),
-        Parent = groupbox._content,
+        Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
@@ -1289,13 +1353,13 @@ function Keybind:GetValue()
     return self._value
 end
 
---@ ColorPicker (simplified)
+--@ ColorPicker
 local ColorPicker = setmetatable({}, { __index = BaseElement })
 ColorPicker.__index = ColorPicker
 
-function ColorPicker.new(groupbox, text, config)
+function ColorPicker.new(container, text, config)
     config = config or {}
-    local self = setmetatable(BaseElement.new(groupbox, config), ColorPicker)
+    local self = setmetatable(BaseElement.new(container, config), ColorPicker)
     self._text = text
     self._flag = config.Flag
     self._default = config.Default or Color3.fromRGB(255, 255, 255)
@@ -1303,12 +1367,13 @@ function ColorPicker.new(groupbox, text, config)
     self._callback = config.Callback
 
     local theme = Library:GetTheme()
+    local parent = getContentParent(container)
 
     self._frame = Utility.Create("Frame", {
         Name = "ColorPicker",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 32),
-        Parent = groupbox._content,
+        Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
@@ -1338,7 +1403,6 @@ function ColorPicker.new(groupbox, text, config)
 
     self._connections:Add(self._preview.MouseButton1Click:Connect(function()
         if self._disabled or self._destroyed then return end
-        -- simple cycle for demo; full HSV picker can be expanded later
         local h, s, v = self._value:ToHSV()
         h = (h + 0.1) % 1
         self:SetValue(Color3.fromHSV(h, s, v))
@@ -1380,12 +1444,11 @@ function Groupbox.new(tab, config)
     local self = setmetatable({}, Groupbox)
     self._tab = tab
     self._name = config.Name or "Group"
-    self._side = config.Side or "Left"
     self._elements = {}
     self._destroyed = false
 
     local theme = Library:GetTheme()
-    local parent = (self._side == "Right") and tab._right or tab._left
+    local parent = tab._scrollContent
 
     self._frame = Utility.Create("Frame", {
         Name = "Groupbox",
@@ -1505,46 +1568,60 @@ end
 local Tab = {}
 Tab.__index = Tab
 
-function Tab.new(window, config)
+function Tab.new(window, config, parentList)
     local self = setmetatable({}, Tab)
     self._window = window
     self._name = config.Name or "Tab"
     self._icon = config.Icon
+    self._full = config.Full == true or config.Type == 2
     self._active = false
     self._groupboxes = {}
+    self._elements = {}
     self._destroyed = false
 
     local theme = Library:GetTheme()
+    local listParent = parentList or window._sidebarList
 
     self._button = Utility.Create("TextButton", {
         Name = self._name,
-        BackgroundColor3 = theme.Surface,
+        BackgroundColor3 = theme.SurfaceSecondary,
         BackgroundTransparency = 1,
         Size = UDim2.new(1, -12, 0, 36),
-        Font = Enum.Font.GothamMedium,
-        Text = "  " .. self._name,
-        TextSize = 13,
-        TextColor3 = theme.TextSecondary,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = "",
         AutoButtonColor = false,
-        Parent = window._sidebarList,
+        Parent = listParent,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = self._button })
-    Library:RegisterTheme(self._button, { TextColor3 = "TextSecondary" })
 
-    local iconId = Library:GetIcon(self._icon)
-    if iconId then
-        Utility.Create("ImageLabel", {
+    local hasIcon = Library:GetIcon(self._icon) ~= nil
+    local textOffset = hasIcon and 34 or 12
+
+    if hasIcon then
+        self._iconImage = Utility.Create("ImageLabel", {
             Name = "Icon",
             BackgroundTransparency = 1,
             Size = UDim2.fromOffset(16, 16),
             Position = UDim2.fromOffset(10, 10),
-            Image = iconId,
+            Image = Library:GetIcon(self._icon),
             ImageColor3 = theme.TextSecondary,
             Parent = self._button,
         })
-        self._button.Text = "      " .. self._name
     end
+
+    self._buttonLabel = Utility.Create("TextLabel", {
+        Name = "Label",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -(textOffset + 8), 1, 0),
+        Position = UDim2.fromOffset(textOffset, 0),
+        Font = Enum.Font.GothamMedium,
+        Text = self._name,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextColor3 = theme.TextSecondary,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Parent = self._button,
+    })
+    Library:RegisterTheme(self._buttonLabel, { TextColor3 = "TextSecondary" })
 
     self._page = Utility.Create("Frame", {
         Name = self._name,
@@ -1554,51 +1631,53 @@ function Tab.new(window, config)
         Parent = window._content,
     })
 
-    self._left = Utility.Create("ScrollingFrame", {
-        Name = "Left",
+    self._scroll = Utility.Create("ScrollingFrame", {
+        Name = "Scroll",
         BackgroundTransparency = 1,
-        Size = UDim2.new(0.5, -6, 1, 0),
-        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.fromScale(1, 1),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         ScrollBarThickness = 3,
         ScrollBarImageColor3 = theme.Border,
         BorderSizePixel = 0,
         Parent = self._page,
-    })
-    Utility.Create("UIListLayout", {
-        SortOrder = Enum.SortOrder.LayoutOrder,
-        Padding = UDim.new(0, 10),
-        Parent = self._left,
-    })
-    Utility.Create("UIPadding", {
-        PaddingTop = UDim.new(0, 4),
-        PaddingBottom = UDim.new(0, 8),
-        Parent = self._left,
     })
 
-    self._right = Utility.Create("ScrollingFrame", {
-        Name = "Right",
+    self._scrollContent = Utility.Create("Frame", {
+        Name = "Content",
         BackgroundTransparency = 1,
-        Size = UDim2.new(0.5, -6, 1, 0),
-        Position = UDim2.new(0.5, 6, 0, 0),
-        CanvasSize = UDim2.new(0, 0, 0, 0),
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        ScrollBarThickness = 3,
-        ScrollBarImageColor3 = theme.Border,
-        BorderSizePixel = 0,
-        Parent = self._page,
+        Size = UDim2.new(1, -8, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = self._scroll,
     })
     Utility.Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
         Padding = UDim.new(0, 10),
-        Parent = self._right,
+        Parent = self._scrollContent,
     })
     Utility.Create("UIPadding", {
         PaddingTop = UDim.new(0, 4),
-        PaddingBottom = UDim.new(0, 8),
-        Parent = self._right,
+        PaddingBottom = UDim.new(0, 12),
+        PaddingLeft = UDim.new(0, 2),
+        PaddingRight = UDim.new(0, 6),
+        Parent = self._scrollContent,
     })
+
+    if self._full then
+        self._content = Utility.Create("Frame", {
+            Name = "Direct",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Parent = self._scrollContent,
+            LayoutOrder = 0,
+        })
+        Utility.Create("UIListLayout", {
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding = UDim.new(0, 6),
+            Parent = self._content,
+        })
+    end
 
     self._button.MouseButton1Click:Connect(function()
         window:SelectTab(self)
@@ -1616,6 +1695,96 @@ function Tab:AddGroupbox(config)
     return gb
 end
 
+function Tab:AddToggle(text, config)
+    if not self._full then
+        warn("[Aether] Tab:AddToggle requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = Toggle.new(self, text, config)
+    table.insert(self._elements, el)
+    return el
+end
+
+function Tab:AddButton(text, config)
+    if not self._full then
+        warn("[Aether] Tab:AddButton requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = Button.new(self, text, config)
+    table.insert(self._elements, el)
+    return el
+end
+
+function Tab:AddSlider(text, config)
+    if not self._full then
+        warn("[Aether] Tab:AddSlider requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = Slider.new(self, text, config)
+    table.insert(self._elements, el)
+    return el
+end
+
+function Tab:AddDropdown(text, config)
+    if not self._full then
+        warn("[Aether] Tab:AddDropdown requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = Dropdown.new(self, text, config)
+    table.insert(self._elements, el)
+    return el
+end
+
+function Tab:AddInput(text, config)
+    if not self._full then
+        warn("[Aether] Tab:AddInput requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = Input.new(self, text, config)
+    table.insert(self._elements, el)
+    return el
+end
+
+function Tab:AddLabel(text, config)
+    if not self._full then
+        warn("[Aether] Tab:AddLabel requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = Label.new(self, text, config)
+    table.insert(self._elements, el)
+    return el
+end
+
+function Tab:AddDivider(config)
+    if not self._full then
+        warn("[Aether] Tab:AddDivider requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = Divider.new(self, config)
+    table.insert(self._elements, el)
+    return el
+end
+
+function Tab:AddKeybind(text, config)
+    if not self._full then
+        warn("[Aether] Tab:AddKeybind requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = Keybind.new(self, text, config)
+    table.insert(self._elements, el)
+    return el
+end
+
+function Tab:AddColorPicker(text, config)
+    if not self._full then
+        warn("[Aether] Tab:AddColorPicker requires Full = true (Type 2). Use Groupbox instead.")
+        return nil
+    end
+    local el = ColorPicker.new(self, text, config)
+    table.insert(self._elements, el)
+    return el
+end
+
 function Tab:SetActive(active)
     self._active = active
     self._page.Visible = active
@@ -1623,10 +1792,16 @@ function Tab:SetActive(active)
     if active then
         self._button.BackgroundTransparency = 0
         self._button.BackgroundColor3 = theme.SurfaceSecondary
-        self._button.TextColor3 = theme.Text
+        self._buttonLabel.TextColor3 = theme.Text
+        if self._iconImage then
+            self._iconImage.ImageColor3 = theme.Text
+        end
     else
         self._button.BackgroundTransparency = 1
-        self._button.TextColor3 = theme.TextSecondary
+        self._buttonLabel.TextColor3 = theme.TextSecondary
+        if self._iconImage then
+            self._iconImage.ImageColor3 = theme.TextSecondary
+        end
     end
 end
 
@@ -1636,9 +1811,96 @@ function Tab:Destroy()
     for _, gb in ipairs(self._groupboxes) do
         gb:Destroy()
     end
+    for _, el in ipairs(self._elements) do
+        if el.Destroy then
+            el:Destroy()
+        end
+    end
     table.clear(self._groupboxes)
+    table.clear(self._elements)
     if self._button then self._button:Destroy() end
     if self._page then self._page:Destroy() end
+end
+
+--@ TabGroup
+local TabGroup = {}
+TabGroup.__index = TabGroup
+
+function TabGroup.new(window, config)
+    local self = setmetatable({}, TabGroup)
+    self._window = window
+    self._name = config.Name or ""
+    self._tabs = {}
+    self._destroyed = false
+
+    local theme = Library:GetTheme()
+
+    self._frame = Utility.Create("Frame", {
+        Name = "TabGroup",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -12, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = window._sidebarList,
+    })
+
+    if self._name ~= "" then
+        self._header = Utility.Create("TextLabel", {
+            Name = "Header",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 22),
+            Font = Enum.Font.GothamBold,
+            Text = string.upper(self._name),
+            TextSize = 10,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextColor3 = theme.TextSecondary,
+            Parent = self._frame,
+        })
+        Utility.Create("UIPadding", {
+            PaddingLeft = UDim.new(0, 6),
+            Parent = self._header,
+        })
+        Library:RegisterTheme(self._header, { TextColor3 = "TextSecondary" })
+    end
+
+    self._list = Utility.Create("Frame", {
+        Name = "List",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = self._frame,
+    })
+    Utility.Create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 4),
+        Parent = self._list,
+    })
+
+    return self
+end
+
+function TabGroup:AddTab(config)
+    if type(config) == "string" then
+        config = { Name = config }
+    end
+    local tab = Tab.new(self._window, config or {}, self._list)
+    table.insert(self._tabs, tab)
+    table.insert(self._window._tabs, tab)
+    if not self._window._activeTab then
+        self._window:SelectTab(tab)
+    end
+    return tab
+end
+
+function TabGroup:Destroy()
+    if self._destroyed then return end
+    self._destroyed = true
+    for _, tab in ipairs(self._tabs) do
+        tab:Destroy()
+    end
+    table.clear(self._tabs)
+    if self._frame then
+        self._frame:Destroy()
+    end
 end
 
 --@ Window
@@ -1651,6 +1913,7 @@ function Window.new(config)
     self._subtitle = config.Subtitle or ""
     self._size = config.Size or UDim2.fromOffset(580, 420)
     self._tabs = {}
+    self._tabGroups = {}
     self._activeTab = nil
     self._connections = ConnectionManager.new()
     self._destroyed = false
@@ -1685,7 +1948,6 @@ function Window.new(config)
     Utility.Create("UIStroke", { Color = theme.Border, Thickness = 1, Parent = self._main })
     Library:RegisterTheme(self._main, { BackgroundColor3 = "Background" })
 
-    -- Topbar
     self._topbar = Utility.Create("Frame", {
         Name = "Topbar",
         BackgroundColor3 = theme.Surface,
@@ -1764,11 +2026,10 @@ function Window.new(config)
         self:ToggleMinimize()
     end))
 
-    -- Sidebar
     self._sidebar = Utility.Create("Frame", {
         Name = "Sidebar",
         BackgroundColor3 = theme.Surface,
-        Size = UDim2.new(0, 140, 1, -42),
+        Size = UDim2.new(0, 148, 1, -42),
         Position = UDim2.fromOffset(0, 42),
         Parent = self._main,
     })
@@ -1787,26 +2048,24 @@ function Window.new(config)
     })
     Utility.Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
-        Padding = UDim.new(0, 4),
+        Padding = UDim.new(0, 6),
         HorizontalAlignment = Enum.HorizontalAlignment.Center,
         Parent = self._sidebarList,
     })
     Utility.Create("UIPadding", {
         PaddingTop = UDim.new(0, 4),
-        PaddingBottom = UDim.new(0, 4),
+        PaddingBottom = UDim.new(0, 8),
         Parent = self._sidebarList,
     })
 
-    -- Content
     self._content = Utility.Create("Frame", {
         Name = "Content",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -152, 1, -54),
-        Position = UDim2.fromOffset(146, 48),
+        Size = UDim2.new(1, -160, 1, -54),
+        Position = UDim2.fromOffset(154, 48),
         Parent = self._main,
     })
 
-    -- Drag
     local dragging, dragStart, startPos
     self._connections:Add(self._topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1847,6 +2106,15 @@ function Window:AddTab(config)
     return tab
 end
 
+function Window:AddTabGroup(config)
+    if type(config) == "string" then
+        config = { Name = config }
+    end
+    local group = TabGroup.new(self, config or {})
+    table.insert(self._tabGroups, group)
+    return group
+end
+
 function Window:SelectTab(tab)
     if self._activeTab == tab then return end
     if self._activeTab then
@@ -1877,10 +2145,16 @@ function Window:Destroy()
     if self._destroyed then return end
     self._destroyed = true
     self._connections:Destroy()
+    for _, group in ipairs(self._tabGroups) do
+        group:Destroy()
+    end
     for _, tab in ipairs(self._tabs) do
-        tab:Destroy()
+        if not tab._destroyed then
+            tab:Destroy()
+        end
     end
     table.clear(self._tabs)
+    table.clear(self._tabGroups)
     if self._gui then
         self._gui:Destroy()
     end
