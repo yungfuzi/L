@@ -1,5 +1,6 @@
 --[[
     Aether UI Library
+    Clean metatable-based Roblox UI framework
     August 2026
 ]]
 
@@ -16,8 +17,6 @@ local Services = {
     HttpService = cloneref(game:GetService("HttpService")),
     TextService = cloneref(game:GetService("TextService")),
 }
-
-local LocalPlayer = Services.Players.LocalPlayer
 
 --@ Utility
 local Utility = {}
@@ -76,6 +75,24 @@ end
 function Utility.Round(n, places)
     local mult = 10 ^ (places or 0)
     return math.floor(n * mult + 0.5) / mult
+end
+
+function Utility.Lighter(c, amount)
+    amount = amount or 0.15
+    return Color3.new(
+        math.clamp(c.R + amount, 0, 1),
+        math.clamp(c.G + amount, 0, 1),
+        math.clamp(c.B + amount, 0, 1)
+    )
+end
+
+function Utility.Darker(c, amount)
+    amount = amount or 0.15
+    return Color3.new(
+        math.clamp(c.R - amount, 0, 1),
+        math.clamp(c.G - amount, 0, 1),
+        math.clamp(c.B - amount, 0, 1)
+    )
 end
 
 --@ Signal
@@ -141,11 +158,6 @@ function ConnectionManager:Add(conn)
     return conn
 end
 
-function ConnectionManager:Connect(signal, fn)
-    local conn = signal:Connect(fn)
-    return self:Add(conn)
-end
-
 function ConnectionManager:Destroy()
     for _, conn in ipairs(self._connections) do
         if typeof(conn) == "RBXScriptConnection" then
@@ -159,21 +171,21 @@ end
 
 --@ Theme
 local DefaultTheme = {
-    Background = Color3.fromRGB(18, 18, 22),
-    Surface = Color3.fromRGB(28, 28, 34),
-    SurfaceSecondary = Color3.fromRGB(36, 36, 44),
-    Border = Color3.fromRGB(48, 48, 58),
-    Text = Color3.fromRGB(240, 240, 245),
-    TextSecondary = Color3.fromRGB(160, 160, 175),
+    Background = Color3.fromRGB(16, 16, 20),
+    Surface = Color3.fromRGB(24, 24, 30),
+    SurfaceSecondary = Color3.fromRGB(32, 32, 40),
+    Border = Color3.fromRGB(44, 44, 54),
+    Text = Color3.fromRGB(245, 245, 250),
+    TextSecondary = Color3.fromRGB(150, 150, 165),
     Accent = Color3.fromRGB(99, 102, 241),
-    AccentHover = Color3.fromRGB(129, 132, 255),
+    AccentHover = Color3.fromRGB(129, 140, 255),
     Success = Color3.fromRGB(34, 197, 94),
     Warning = Color3.fromRGB(234, 179, 8),
     Error = Color3.fromRGB(239, 68, 68),
     ToggleOn = Color3.fromRGB(99, 102, 241),
-    ToggleOff = Color3.fromRGB(60, 60, 72),
+    ToggleOff = Color3.fromRGB(55, 55, 68),
     SliderFill = Color3.fromRGB(99, 102, 241),
-    InputBackground = Color3.fromRGB(24, 24, 30),
+    InputBackground = Color3.fromRGB(20, 20, 26),
 }
 
 --@ Library
@@ -359,9 +371,6 @@ end
 
 function BaseElement:SetDisabled(v)
     self._disabled = v
-    if self._frame then
-        self._frame.Active = not v
-    end
     return self
 end
 
@@ -404,7 +413,7 @@ function Toggle.new(container, text, config)
 
     local theme = Library:GetTheme()
     local parent = getContentParent(container)
-    local height = config.Description and 36 or 32
+    local height = config.Description and 38 or 30
 
     self._frame = Utility.Create("Frame", {
         Name = "Toggle",
@@ -416,25 +425,24 @@ function Toggle.new(container, text, config)
     self._label = Utility.Create("TextLabel", {
         Name = "Label",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -50, 1, 0),
-        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.new(1, -48, 0, config.Description and 16 or 30),
+        Position = UDim2.fromOffset(0, config.Description and 2 or 0),
         Font = Enum.Font.GothamMedium,
         Text = text,
         TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
         TextColor3 = theme.Text,
         Parent = self._frame,
     })
     Library:RegisterTheme(self._label, { TextColor3 = "Text" })
 
     if config.Description then
-        self._label.Size = UDim2.new(1, -50, 0, 16)
-        self._label.Position = UDim2.fromOffset(0, 2)
         self._desc = Utility.Create("TextLabel", {
             Name = "Description",
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, -50, 0, 12),
-            Position = UDim2.fromOffset(0, 17),
+            Size = UDim2.new(1, -48, 0, 14),
+            Position = UDim2.fromOffset(0, 18),
             Font = Enum.Font.Gotham,
             Text = config.Description,
             TextSize = 11,
@@ -448,20 +456,32 @@ function Toggle.new(container, text, config)
     self._box = Utility.Create("Frame", {
         Name = "Box",
         BackgroundColor3 = self._value and theme.ToggleOn or theme.ToggleOff,
-        Size = UDim2.fromOffset(36, 20),
-        Position = UDim2.new(1, -36, 0.5, -10),
+        Size = UDim2.fromOffset(38, 22),
+        Position = UDim2.new(1, -38, 0.5, -11),
         Parent = self._frame,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = self._box })
+    Utility.Create("UIStroke", {
+        Color = theme.Border,
+        Thickness = 1,
+        Transparency = 0.4,
+        Parent = self._box,
+    })
 
     self._knob = Utility.Create("Frame", {
         Name = "Knob",
         BackgroundColor3 = Color3.fromRGB(255, 255, 255),
         Size = UDim2.fromOffset(16, 16),
-        Position = self._value and UDim2.new(1, -18, 0.5, -8) or UDim2.fromOffset(2, 2),
+        Position = self._value and UDim2.new(1, -19, 0.5, -8) or UDim2.fromOffset(3, 3),
         Parent = self._box,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = self._knob })
+    Utility.Create("UIStroke", {
+        Color = Color3.fromRGB(0, 0, 0),
+        Thickness = 0.5,
+        Transparency = 0.7,
+        Parent = self._knob,
+    })
 
     local btn = Utility.Create("TextButton", {
         Name = "Hit",
@@ -492,7 +512,7 @@ function Toggle:SetValue(value, silent)
     local info = Library.Animations.Toggle
     Utility.Tween(self._box, { BackgroundColor3 = value and theme.ToggleOn or theme.ToggleOff }, info)
     Utility.Tween(self._knob, {
-        Position = value and UDim2.new(1, -18, 0.5, -8) or UDim2.fromOffset(2, 2),
+        Position = value and UDim2.new(1, -19, 0.5, -8) or UDim2.fromOffset(3, 3),
     }, info)
     if self._flag then
         Library.Flags[self._flag] = value
@@ -526,7 +546,7 @@ function Button.new(container, text, config)
     self._frame = Utility.Create("Frame", {
         Name = "Button",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 32),
+        Size = UDim2.new(1, 0, 0, 30),
         Parent = parent,
     })
 
@@ -542,6 +562,12 @@ function Button.new(container, text, config)
         Parent = self._frame,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = self._btn })
+    Utility.Create("UIStroke", {
+        Color = theme.Border,
+        Thickness = 1,
+        Transparency = 0.5,
+        Parent = self._btn,
+    })
     Library:RegisterTheme(self._btn, { BackgroundColor3 = "SurfaceSecondary", TextColor3 = "Text" })
 
     local fast = Library.Animations.Fast
@@ -551,6 +577,13 @@ function Button.new(container, text, config)
     end))
     self._connections:Add(self._btn.MouseLeave:Connect(function()
         Utility.Tween(self._btn, { BackgroundColor3 = theme.SurfaceSecondary }, fast)
+    end))
+    self._connections:Add(self._btn.MouseButton1Down:Connect(function()
+        if self._disabled then return end
+        Utility.Tween(self._btn, { BackgroundColor3 = Utility.Darker(theme.Border, 0.08) }, fast)
+    end))
+    self._connections:Add(self._btn.MouseButton1Up:Connect(function()
+        Utility.Tween(self._btn, { BackgroundColor3 = theme.Border }, fast)
     end))
     self._connections:Add(self._btn.MouseButton1Click:Connect(function()
         if self._disabled or self._destroyed then return end
@@ -596,14 +629,14 @@ function Slider.new(container, text, config)
     self._frame = Utility.Create("Frame", {
         Name = "Slider",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 48),
+        Size = UDim2.new(1, 0, 0, 46),
         Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
         Name = "Label",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -70, 0, 16),
+        Size = UDim2.new(1, -68, 0, 16),
         Position = UDim2.fromOffset(0, 0),
         Font = Enum.Font.GothamMedium,
         Text = text,
@@ -618,23 +651,23 @@ function Slider.new(container, text, config)
         Name = "Value",
         BackgroundColor3 = theme.InputBackground,
         BackgroundTransparency = 1,
-        Size = UDim2.fromOffset(64, 18),
-        Position = UDim2.new(1, -64, 0, -1),
-        Font = Enum.Font.Gotham,
+        Size = UDim2.fromOffset(62, 18),
+        Position = UDim2.new(1, -62, 0, -1),
+        Font = Enum.Font.GothamMedium,
         Text = self._prefix .. tostring(self._value) .. self._suffix,
         TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Right,
-        TextColor3 = theme.TextSecondary,
+        TextColor3 = theme.Accent,
         ClearTextOnFocus = false,
         Parent = self._frame,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = self._valueBox })
-    Library:RegisterTheme(self._valueBox, { TextColor3 = "TextSecondary" })
+    Library:RegisterTheme(self._valueBox, { TextColor3 = "Accent" })
 
     self._track = Utility.Create("Frame", {
         Name = "Track",
         BackgroundColor3 = theme.SurfaceSecondary,
-        Size = UDim2.new(1, 0, 0, 6),
+        Size = UDim2.new(1, 0, 0, 8),
         Position = UDim2.fromOffset(0, 28),
         Parent = self._frame,
     })
@@ -648,6 +681,15 @@ function Slider.new(container, text, config)
         Parent = self._track,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = self._fill })
+    local fillGrad = Utility.Create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, theme.SliderFill),
+            ColorSequenceKeypoint.new(1, Utility.Lighter(theme.SliderFill, 0.25)),
+        }),
+        Rotation = 0,
+        Parent = self._fill,
+    })
+    self._fillGrad = fillGrad
     Library:RegisterTheme(self._fill, { BackgroundColor3 = "SliderFill" })
 
     self._knob = Utility.Create("Frame", {
@@ -656,15 +698,20 @@ function Slider.new(container, text, config)
         Size = UDim2.fromOffset(14, 14),
         Position = UDim2.new(0, -7, 0.5, -7),
         Parent = self._track,
+        ZIndex = 2,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = self._knob })
+    Utility.Create("UIStroke", {
+        Color = theme.Accent,
+        Thickness = 1.5,
+        Parent = self._knob,
+    })
 
     local dragging = false
     local function updateFromX(x)
         local rel = math.clamp((x - self._track.AbsolutePosition.X) / math.max(self._track.AbsoluteSize.X, 1), 0, 1)
         local raw = self._min + (self._max - self._min) * rel
-        local val = Utility.Round(raw, self._rounding)
-        self:SetValue(val)
+        self:SetValue(Utility.Round(raw, self._rounding))
     end
 
     self._connections:Add(self._track.InputBegan:Connect(function(input)
@@ -695,11 +742,11 @@ function Slider.new(container, text, config)
         self._valueBox.TextColor3 = theme.Text
     end))
 
-    self._connections:Add(self._valueBox.FocusLost:Connect(function(enter)
+    self._connections:Add(self._valueBox.FocusLost:Connect(function()
         self._editing = false
         self._valueBox.BackgroundTransparency = 1
         self._valueBox.TextXAlignment = Enum.TextXAlignment.Right
-        self._valueBox.TextColor3 = theme.TextSecondary
+        self._valueBox.TextColor3 = theme.Accent
         local n = tonumber(self._valueBox.Text)
         if n then
             self:SetValue(n)
@@ -809,6 +856,12 @@ function Dropdown.new(container, text, config)
         ZIndex = 6,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = self._box })
+    Utility.Create("UIStroke", {
+        Color = theme.Border,
+        Thickness = 1,
+        Transparency = 0.4,
+        Parent = self._box,
+    })
     Utility.Create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 28), Parent = self._box })
     Library:RegisterTheme(self._box, { BackgroundColor3 = "InputBackground", TextColor3 = "Text" })
 
@@ -1043,7 +1096,7 @@ function Dropdown:SetValues(values)
     return self
 end
 
---@ Input
+--@ Input (compact: label left, box right)
 local Input = setmetatable({}, { __index = BaseElement })
 Input.__index = Input
 
@@ -1065,19 +1118,21 @@ function Input.new(container, text, config)
     self._frame = Utility.Create("Frame", {
         Name = "Input",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 52),
+        Size = UDim2.new(1, 0, 0, 30),
         Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
         Name = "Label",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 16),
+        Size = UDim2.new(0.42, -6, 1, 0),
         Font = Enum.Font.GothamMedium,
         Text = text,
         TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
         TextColor3 = theme.Text,
+        TextTruncate = Enum.TextTruncate.AtEnd,
         Parent = self._frame,
     })
     Library:RegisterTheme(self._label, { TextColor3 = "Text" })
@@ -1085,8 +1140,8 @@ function Input.new(container, text, config)
     self._box = Utility.Create("TextBox", {
         Name = "Box",
         BackgroundColor3 = theme.InputBackground,
-        Size = UDim2.new(1, 0, 0, 28),
-        Position = UDim2.fromOffset(0, 20),
+        Size = UDim2.new(0.58, 0, 0, 26),
+        Position = UDim2.new(0.42, 0, 0.5, -13),
         Font = Enum.Font.Gotham,
         Text = self._value,
         PlaceholderText = self._placeholder,
@@ -1098,24 +1153,30 @@ function Input.new(container, text, config)
         Parent = self._frame,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = self._box })
-    Utility.Create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), Parent = self._box })
+    Utility.Create("UIStroke", {
+        Color = theme.Border,
+        Thickness = 1,
+        Transparency = 0.4,
+        Parent = self._box,
+    })
+    Utility.Create("UIPadding", {
+        PaddingLeft = UDim.new(0, 8),
+        PaddingRight = UDim.new(0, 8),
+        Parent = self._box,
+    })
     Library:RegisterTheme(self._box, { BackgroundColor3 = "InputBackground", TextColor3 = "Text" })
 
-    local iconId = Library:GetIcon("Input")
-    if iconId then
-        self._box.Size = UDim2.new(1, -28, 0, 28)
-        Utility.Create("ImageLabel", {
-            Name = "Icon",
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(14, 14),
-            Position = UDim2.new(1, -20, 0, 27),
-            Image = iconId,
-            ImageColor3 = theme.TextSecondary,
-            Parent = self._frame,
-        })
-    end
-
+    self._connections:Add(self._box.Focused:Connect(function()
+        local stroke = self._box:FindFirstChildOfClass("UIStroke")
+        if stroke then
+            Utility.Tween(stroke, { Color = theme.Accent, Transparency = 0 }, Library.Animations.Fast)
+        end
+    end))
     self._connections:Add(self._box.FocusLost:Connect(function(enter)
+        local stroke = self._box:FindFirstChildOfClass("UIStroke")
+        if stroke then
+            Utility.Tween(stroke, { Color = theme.Border, Transparency = 0.4 }, Library.Animations.Fast)
+        end
         local textVal = self._box.Text
         if self._numeric then
             local n = tonumber(textVal)
@@ -1176,7 +1237,7 @@ function Label.new(container, text, config)
     self._frame = Utility.Create("Frame", {
         Name = "Label",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 22),
+        Size = UDim2.new(1, 0, 0, 20),
         Parent = parent,
     })
 
@@ -1186,7 +1247,7 @@ function Label.new(container, text, config)
         Size = UDim2.fromScale(1, 1),
         Font = Enum.Font.Gotham,
         Text = text,
-        TextSize = 13,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextColor3 = theme.TextSecondary,
         TextWrapped = true,
@@ -1218,7 +1279,7 @@ function Divider.new(container, config)
     self._frame = Utility.Create("Frame", {
         Name = "Divider",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 12),
+        Size = UDim2.new(1, 0, 0, 10),
         Parent = parent,
     })
 
@@ -1245,7 +1306,6 @@ function Keybind.new(container, text, config)
     self._flag = config.Flag
     self._default = config.Default or Enum.KeyCode.Unknown
     self._value = self._default
-    self._mode = config.Mode or "Toggle"
     self._callback = config.Callback
     self._listening = false
 
@@ -1255,18 +1315,19 @@ function Keybind.new(container, text, config)
     self._frame = Utility.Create("Frame", {
         Name = "Keybind",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 32),
+        Size = UDim2.new(1, 0, 0, 30),
         Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
         Name = "Label",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -90, 1, 0),
+        Size = UDim2.new(1, -86, 1, 0),
         Font = Enum.Font.GothamMedium,
         Text = text,
         TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
         TextColor3 = theme.Text,
         Parent = self._frame,
     })
@@ -1275,9 +1336,9 @@ function Keybind.new(container, text, config)
     self._box = Utility.Create("TextButton", {
         Name = "Box",
         BackgroundColor3 = theme.SurfaceSecondary,
-        Size = UDim2.fromOffset(80, 24),
-        Position = UDim2.new(1, -80, 0.5, -12),
-        Font = Enum.Font.Gotham,
+        Size = UDim2.fromOffset(78, 24),
+        Position = UDim2.new(1, -78, 0.5, -12),
+        Font = Enum.Font.GothamMedium,
         Text = self._value.Name == "Unknown" and "None" or self._value.Name,
         TextSize = 11,
         TextColor3 = theme.Text,
@@ -1285,6 +1346,12 @@ function Keybind.new(container, text, config)
         Parent = self._frame,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 5), Parent = self._box })
+    Utility.Create("UIStroke", {
+        Color = theme.Border,
+        Thickness = 1,
+        Transparency = 0.5,
+        Parent = self._box,
+    })
     Library:RegisterTheme(self._box, { BackgroundColor3 = "SurfaceSecondary", TextColor3 = "Text" })
 
     local iconId = Library:GetIcon("Keyboard")
@@ -1372,18 +1439,19 @@ function ColorPicker.new(container, text, config)
     self._frame = Utility.Create("Frame", {
         Name = "ColorPicker",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 32),
+        Size = UDim2.new(1, 0, 0, 30),
         Parent = parent,
     })
 
     self._label = Utility.Create("TextLabel", {
         Name = "Label",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -40, 1, 0),
+        Size = UDim2.new(1, -36, 1, 0),
         Font = Enum.Font.GothamMedium,
         Text = text,
         TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
         TextColor3 = theme.Text,
         Parent = self._frame,
     })
@@ -1398,7 +1466,7 @@ function ColorPicker.new(container, text, config)
         AutoButtonColor = false,
         Parent = self._frame,
     })
-    Utility.Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = self._preview })
+    Utility.Create("UICorner", { CornerRadius = UDim.new(0, 5), Parent = self._preview })
     Utility.Create("UIStroke", { Color = theme.Border, Thickness = 1, Parent = self._preview })
 
     self._connections:Add(self._preview.MouseButton1Click:Connect(function()
@@ -1444,32 +1512,56 @@ function Groupbox.new(tab, config)
     local self = setmetatable({}, Groupbox)
     self._tab = tab
     self._name = config.Name or "Group"
+    self._side = config.Side or "Full"
     self._elements = {}
     self._destroyed = false
 
     local theme = Library:GetTheme()
-    local parent = tab._scrollContent
+    local parent
+    if self._side == "Left" then
+        parent = tab._left
+    elseif self._side == "Right" then
+        parent = tab._right
+    else
+        parent = tab._scrollContent
+    end
 
     self._frame = Utility.Create("Frame", {
         Name = "Groupbox",
         BackgroundColor3 = theme.Surface,
-        Size = UDim2.new(1, 0, 0, 40),
+        Size = UDim2.new(1, 0, 0, 36),
         AutomaticSize = Enum.AutomaticSize.Y,
         Parent = parent,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = self._frame })
-    Utility.Create("UIStroke", { Color = theme.Border, Thickness = 1, Parent = self._frame })
+    Utility.Create("UIStroke", {
+        Color = theme.Border,
+        Thickness = 1,
+        Transparency = 0.35,
+        Parent = self._frame,
+    })
     Library:RegisterTheme(self._frame, { BackgroundColor3 = "Surface" })
+
+    self._accent = Utility.Create("Frame", {
+        Name = "Accent",
+        BackgroundColor3 = theme.Accent,
+        Size = UDim2.new(0, 3, 0, 14),
+        Position = UDim2.fromOffset(10, 10),
+        Parent = self._frame,
+    })
+    Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = self._accent })
+    Library:RegisterTheme(self._accent, { BackgroundColor3 = "Accent" })
 
     self._title = Utility.Create("TextLabel", {
         Name = "Title",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -16, 0, 28),
-        Position = UDim2.fromOffset(10, 4),
+        Size = UDim2.new(1, -28, 0, 26),
+        Position = UDim2.fromOffset(18, 4),
         Font = Enum.Font.GothamBold,
         Text = self._name,
-        TextSize = 13,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
         TextColor3 = theme.Text,
         Parent = self._frame,
     })
@@ -1479,7 +1571,7 @@ function Groupbox.new(tab, config)
         Name = "Content",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, -16, 0, 0),
-        Position = UDim2.fromOffset(8, 32),
+        Position = UDim2.fromOffset(8, 30),
         AutomaticSize = Enum.AutomaticSize.Y,
         Parent = self._frame,
     })
@@ -1573,7 +1665,6 @@ function Tab.new(window, config, parentList)
     self._window = window
     self._name = config.Name or "Tab"
     self._icon = config.Icon
-    self._full = config.Full == true or config.Type == 2
     self._active = false
     self._groupboxes = {}
     self._elements = {}
@@ -1586,22 +1677,33 @@ function Tab.new(window, config, parentList)
         Name = self._name,
         BackgroundColor3 = theme.SurfaceSecondary,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -12, 0, 36),
+        Size = UDim2.new(1, 0, 0, 34),
         Text = "",
         AutoButtonColor = false,
         Parent = listParent,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = self._button })
 
+    self._indicator = Utility.Create("Frame", {
+        Name = "Indicator",
+        BackgroundColor3 = theme.Accent,
+        Size = UDim2.new(0, 3, 0, 16),
+        Position = UDim2.fromOffset(0, 9),
+        Visible = false,
+        Parent = self._button,
+    })
+    Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = self._indicator })
+    Library:RegisterTheme(self._indicator, { BackgroundColor3 = "Accent" })
+
     local hasIcon = Library:GetIcon(self._icon) ~= nil
-    local textOffset = hasIcon and 34 or 12
+    local textOffset = hasIcon and 32 or 12
 
     if hasIcon then
         self._iconImage = Utility.Create("ImageLabel", {
             Name = "Icon",
             BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(16, 16),
-            Position = UDim2.fromOffset(10, 10),
+            Size = UDim2.fromOffset(15, 15),
+            Position = UDim2.fromOffset(10, 9.5),
             Image = Library:GetIcon(self._icon),
             ImageColor3 = theme.TextSecondary,
             Parent = self._button,
@@ -1611,12 +1713,13 @@ function Tab.new(window, config, parentList)
     self._buttonLabel = Utility.Create("TextLabel", {
         Name = "Label",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -(textOffset + 8), 1, 0),
+        Size = UDim2.new(1, -(textOffset + 6), 1, 0),
         Position = UDim2.fromOffset(textOffset, 0),
         Font = Enum.Font.GothamMedium,
         Text = self._name,
-        TextSize = 13,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
         TextColor3 = theme.TextSecondary,
         TextTruncate = Enum.TextTruncate.AtEnd,
         Parent = self._button,
@@ -1646,7 +1749,7 @@ function Tab.new(window, config, parentList)
     self._scrollContent = Utility.Create("Frame", {
         Name = "Content",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -8, 0, 0),
+        Size = UDim2.new(1, -6, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         Parent = self._scroll,
     })
@@ -1656,28 +1759,62 @@ function Tab.new(window, config, parentList)
         Parent = self._scrollContent,
     })
     Utility.Create("UIPadding", {
-        PaddingTop = UDim.new(0, 4),
+        PaddingTop = UDim.new(0, 2),
         PaddingBottom = UDim.new(0, 12),
         PaddingLeft = UDim.new(0, 2),
-        PaddingRight = UDim.new(0, 6),
+        PaddingRight = UDim.new(0, 4),
         Parent = self._scrollContent,
     })
 
-    if self._full then
-        self._content = Utility.Create("Frame", {
-            Name = "Direct",
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y,
-            Parent = self._scrollContent,
-            LayoutOrder = 0,
-        })
-        Utility.Create("UIListLayout", {
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 6),
-            Parent = self._content,
-        })
-    end
+    self._dual = Utility.Create("Frame", {
+        Name = "Dual",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        LayoutOrder = 1,
+        Parent = self._scrollContent,
+    })
+
+    self._left = Utility.Create("Frame", {
+        Name = "Left",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.5, -5, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = self._dual,
+    })
+    Utility.Create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 10),
+        Parent = self._left,
+    })
+
+    self._right = Utility.Create("Frame", {
+        Name = "Right",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.5, -5, 0, 0),
+        Position = UDim2.new(0.5, 5, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = self._dual,
+    })
+    Utility.Create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 10),
+        Parent = self._right,
+    })
+
+    self._content = Utility.Create("Frame", {
+        Name = "Direct",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        LayoutOrder = 0,
+        Parent = self._scrollContent,
+    })
+    Utility.Create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 6),
+        Parent = self._content,
+    })
 
     self._button.MouseButton1Click:Connect(function()
         window:SelectTab(self)
@@ -1690,96 +1827,64 @@ function Tab:AddGroupbox(config)
     if type(config) == "string" then
         config = { Name = config }
     end
-    local gb = Groupbox.new(self, config or {})
+    config = config or {}
+    if not config.Side then
+        config.Side = "Full"
+    end
+    local gb = Groupbox.new(self, config)
     table.insert(self._groupboxes, gb)
     return gb
 end
 
 function Tab:AddToggle(text, config)
-    if not self._full then
-        warn("[Aether] Tab:AddToggle requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = Toggle.new(self, text, config)
     table.insert(self._elements, el)
     return el
 end
 
 function Tab:AddButton(text, config)
-    if not self._full then
-        warn("[Aether] Tab:AddButton requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = Button.new(self, text, config)
     table.insert(self._elements, el)
     return el
 end
 
 function Tab:AddSlider(text, config)
-    if not self._full then
-        warn("[Aether] Tab:AddSlider requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = Slider.new(self, text, config)
     table.insert(self._elements, el)
     return el
 end
 
 function Tab:AddDropdown(text, config)
-    if not self._full then
-        warn("[Aether] Tab:AddDropdown requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = Dropdown.new(self, text, config)
     table.insert(self._elements, el)
     return el
 end
 
 function Tab:AddInput(text, config)
-    if not self._full then
-        warn("[Aether] Tab:AddInput requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = Input.new(self, text, config)
     table.insert(self._elements, el)
     return el
 end
 
 function Tab:AddLabel(text, config)
-    if not self._full then
-        warn("[Aether] Tab:AddLabel requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = Label.new(self, text, config)
     table.insert(self._elements, el)
     return el
 end
 
 function Tab:AddDivider(config)
-    if not self._full then
-        warn("[Aether] Tab:AddDivider requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = Divider.new(self, config)
     table.insert(self._elements, el)
     return el
 end
 
 function Tab:AddKeybind(text, config)
-    if not self._full then
-        warn("[Aether] Tab:AddKeybind requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = Keybind.new(self, text, config)
     table.insert(self._elements, el)
     return el
 end
 
 function Tab:AddColorPicker(text, config)
-    if not self._full then
-        warn("[Aether] Tab:AddColorPicker requires Full = true (Type 2). Use Groupbox instead.")
-        return nil
-    end
     local el = ColorPicker.new(self, text, config)
     table.insert(self._elements, el)
     return el
@@ -1793,12 +1898,14 @@ function Tab:SetActive(active)
         self._button.BackgroundTransparency = 0
         self._button.BackgroundColor3 = theme.SurfaceSecondary
         self._buttonLabel.TextColor3 = theme.Text
+        self._indicator.Visible = true
         if self._iconImage then
             self._iconImage.ImageColor3 = theme.Text
         end
     else
         self._button.BackgroundTransparency = 1
         self._buttonLabel.TextColor3 = theme.TextSecondary
+        self._indicator.Visible = false
         if self._iconImage then
             self._iconImage.ImageColor3 = theme.TextSecondary
         end
@@ -1836,42 +1943,52 @@ function TabGroup.new(window, config)
     local theme = Library:GetTheme()
 
     self._frame = Utility.Create("Frame", {
-        Name = "TabGroup",
+        Name = "TabGroup_" .. (self._name ~= "" and self._name or "Default"),
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -12, 0, 0),
+        Size = UDim2.new(1, -10, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         Parent = window._sidebarList,
+    })
+
+    local layout = Utility.Create("UIListLayout", {
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 3),
+        Parent = self._frame,
     })
 
     if self._name ~= "" then
         self._header = Utility.Create("TextLabel", {
             Name = "Header",
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 22),
+            Size = UDim2.new(1, 0, 0, 20),
             Font = Enum.Font.GothamBold,
             Text = string.upper(self._name),
             TextSize = 10,
             TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Bottom,
             TextColor3 = theme.TextSecondary,
+            LayoutOrder = 0,
             Parent = self._frame,
         })
         Utility.Create("UIPadding", {
-            PaddingLeft = UDim.new(0, 6),
+            PaddingLeft = UDim.new(0, 4),
+            PaddingBottom = UDim.new(0, 2),
             Parent = self._header,
         })
         Library:RegisterTheme(self._header, { TextColor3 = "TextSecondary" })
     end
 
     self._list = Utility.Create("Frame", {
-        Name = "List",
+        Name = "Tabs",
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
+        LayoutOrder = 1,
         Parent = self._frame,
     })
     Utility.Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
-        Padding = UDim.new(0, 4),
+        Padding = UDim.new(0, 3),
         Parent = self._list,
     })
 
@@ -1911,7 +2028,7 @@ function Window.new(config)
     local self = setmetatable({}, Window)
     self._title = config.Title or "Aether"
     self._subtitle = config.Subtitle or ""
-    self._size = config.Size or UDim2.fromOffset(580, 420)
+    self._size = config.Size or UDim2.fromOffset(600, 440)
     self._tabs = {}
     self._tabGroups = {}
     self._activeTab = nil
@@ -1945,13 +2062,18 @@ function Window.new(config)
         Parent = self._gui,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = self._main })
-    Utility.Create("UIStroke", { Color = theme.Border, Thickness = 1, Parent = self._main })
+    Utility.Create("UIStroke", {
+        Color = theme.Border,
+        Thickness = 1,
+        Transparency = 0.3,
+        Parent = self._main,
+    })
     Library:RegisterTheme(self._main, { BackgroundColor3 = "Background" })
 
     self._topbar = Utility.Create("Frame", {
         Name = "Topbar",
         BackgroundColor3 = theme.Surface,
-        Size = UDim2.new(1, 0, 0, 42),
+        Size = UDim2.new(1, 0, 0, 44),
         Parent = self._main,
     })
     Utility.Create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = self._topbar })
@@ -1960,8 +2082,8 @@ function Window.new(config)
     Utility.Create("Frame", {
         Name = "TopbarFix",
         BackgroundColor3 = theme.Surface,
-        Size = UDim2.new(1, 0, 0, 12),
-        Position = UDim2.new(0, 0, 1, -12),
+        Size = UDim2.new(1, 0, 0, 14),
+        Position = UDim2.new(0, 0, 1, -14),
         BorderSizePixel = 0,
         Parent = self._topbar,
     })
@@ -1985,7 +2107,7 @@ function Window.new(config)
             Name = "Subtitle",
             BackgroundTransparency = 1,
             Size = UDim2.new(1, -80, 0, 14),
-            Position = UDim2.fromOffset(14, 24),
+            Position = UDim2.fromOffset(14, 25),
             Font = Enum.Font.Gotham,
             Text = self._subtitle,
             TextSize = 11,
@@ -2000,7 +2122,7 @@ function Window.new(config)
         Name = "Close",
         BackgroundTransparency = 1,
         Size = UDim2.fromOffset(28, 28),
-        Position = UDim2.new(1, -34, 0, 7),
+        Position = UDim2.new(1, -34, 0, 8),
         Font = Enum.Font.GothamBold,
         Text = "×",
         TextSize = 18,
@@ -2010,12 +2132,18 @@ function Window.new(config)
     self._connections:Add(self._closeBtn.MouseButton1Click:Connect(function()
         self:Destroy()
     end))
+    self._connections:Add(self._closeBtn.MouseEnter:Connect(function()
+        self._closeBtn.TextColor3 = theme.Error
+    end))
+    self._connections:Add(self._closeBtn.MouseLeave:Connect(function()
+        self._closeBtn.TextColor3 = theme.TextSecondary
+    end))
 
     self._minBtn = Utility.Create("TextButton", {
         Name = "Min",
         BackgroundTransparency = 1,
         Size = UDim2.fromOffset(28, 28),
-        Position = UDim2.new(1, -62, 0, 7),
+        Position = UDim2.new(1, -62, 0, 8),
         Font = Enum.Font.GothamBold,
         Text = "–",
         TextSize = 16,
@@ -2029,17 +2157,26 @@ function Window.new(config)
     self._sidebar = Utility.Create("Frame", {
         Name = "Sidebar",
         BackgroundColor3 = theme.Surface,
-        Size = UDim2.new(0, 148, 1, -42),
-        Position = UDim2.fromOffset(0, 42),
+        Size = UDim2.new(0, 150, 1, -44),
+        Position = UDim2.fromOffset(0, 44),
         Parent = self._main,
     })
     Library:RegisterTheme(self._sidebar, { BackgroundColor3 = "Surface" })
 
+    Utility.Create("Frame", {
+        Name = "SidebarLine",
+        BackgroundColor3 = theme.Border,
+        Size = UDim2.new(0, 1, 1, 0),
+        Position = UDim2.new(1, -1, 0, 0),
+        BorderSizePixel = 0,
+        Parent = self._sidebar,
+    })
+
     self._sidebarList = Utility.Create("ScrollingFrame", {
         Name = "List",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 1, -8),
-        Position = UDim2.fromOffset(0, 4),
+        Size = UDim2.new(1, -8, 1, -10),
+        Position = UDim2.fromOffset(5, 6),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         ScrollBarThickness = 2,
@@ -2048,12 +2185,11 @@ function Window.new(config)
     })
     Utility.Create("UIListLayout", {
         SortOrder = Enum.SortOrder.LayoutOrder,
-        Padding = UDim.new(0, 6),
-        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        Padding = UDim.new(0, 8),
         Parent = self._sidebarList,
     })
     Utility.Create("UIPadding", {
-        PaddingTop = UDim.new(0, 4),
+        PaddingTop = UDim.new(0, 2),
         PaddingBottom = UDim.new(0, 8),
         Parent = self._sidebarList,
     })
@@ -2061,8 +2197,8 @@ function Window.new(config)
     self._content = Utility.Create("Frame", {
         Name = "Content",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -160, 1, -54),
-        Position = UDim2.fromOffset(154, 48),
+        Size = UDim2.new(1, -162, 1, -56),
+        Position = UDim2.fromOffset(156, 50),
         Parent = self._main,
     })
 
@@ -2129,7 +2265,7 @@ function Window:ToggleMinimize()
     if self._minimized then
         self._sidebar.Visible = false
         self._content.Visible = false
-        self._main.Size = UDim2.new(self._size.X.Scale, self._size.X.Offset, 0, 42)
+        self._main.Size = UDim2.new(self._size.X.Scale, self._size.X.Offset, 0, 44)
     else
         self._sidebar.Visible = true
         self._content.Visible = true
