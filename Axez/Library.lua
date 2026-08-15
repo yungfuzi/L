@@ -2,12 +2,13 @@
     Library.lua — Modern macOS-inspired Roblox UI Framework
     Single ModuleScript • Metatable OOP • Responsive • DPI • Theme Tokens
     Designed for current Roblox engine (≈ August 2026)
+    v2.3.0
 ]]
 
 local Library = {}
 Library.__index = Library
-Library.Version = "2.1.0"
-Library.Flags = {}
+Library.Version = "2.3.0"
+Library.Flags = {}          -- Flag objects: .Value, .Text, .Type, :Set(), etc.
 Library.Windows = {}
 Library.Notifications = {}
 Library.ActiveTheme = "macOS Dark"
@@ -28,7 +29,6 @@ local HttpService       = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 local Mouse       = LocalPlayer:GetMouse()
 
--- Executor helpers (safe fallbacks)
 local cloneref   = cloneref or clonereference or function(i) return i end
 local gethui     = gethui or function() return CoreGui end
 local protectgui = protectgui or (syn and syn.protect_gui) or function() end
@@ -62,12 +62,23 @@ export type WindowConfig = {
 	Size: UDim2?,
 	MinSize: Vector2?,
 	MaxSize: Vector2?,
-	Theme: string | ThemeTokens?,
+	Theme: (string | ThemeTokens)?,
 	Acrylic: boolean?,
 	Resizable: boolean?,
 	Draggable: boolean?,
 	Center: boolean?,
 	Icon: string?,
+	ShowTabName: boolean?,
+	CompactTab: boolean?,
+}
+
+export type SectionConfig = {
+	Name: string?,
+	Type: ("full" | "left" | "right")?,
+	Collapse: {
+		Enabled: boolean?,
+		Default: boolean?, -- true = collapsed by default
+	}?,
 }
 
 export type ToggleConfig = {
@@ -75,6 +86,7 @@ export type ToggleConfig = {
 	Description: string?,
 	Flag: string?,
 	Default: boolean?,
+	Tooltip: string?,
 	Callback: ((value: boolean) -> ())?,
 }
 
@@ -87,6 +99,7 @@ export type SliderConfig = {
 	Default: number?,
 	Rounding: number?,
 	Suffix: string?,
+	Tooltip: string?,
 	Callback: ((value: number) -> ())?,
 }
 
@@ -95,9 +108,10 @@ export type DropdownConfig = {
 	Description: string?,
 	Flag: string?,
 	Values: {string}?,
-	Default: string | {string}?,
+	Default: (string | {string})?,
 	Multi: boolean?,
 	Searchable: boolean?,
+	Tooltip: string?,
 	Callback: ((value: any) -> ())?,
 }
 
@@ -109,6 +123,7 @@ export type InputConfig = {
 	Default: string?,
 	ClearTextOnFocus: boolean?,
 	Numeric: boolean?,
+	Tooltip: string?,
 	Callback: ((value: string) -> ())?,
 }
 
@@ -116,15 +131,19 @@ export type KeybindConfig = {
 	Name: string,
 	Description: string?,
 	Flag: string?,
-	Default: Enum.KeyCode | Enum.UserInputType?,
+	Default: (Enum.KeyCode | Enum.UserInputType)?,
 	Mode: ("Toggle" | "Hold" | "Always")?,
-	Callback: ((key: Enum.KeyCode | Enum.UserInputType) -> ())?,
+	Tooltip: string?,
+	Callback: ((key: Enum.KeyCode | Enum.UserInputType, active: boolean?) -> ())?,
 }
 
 export type ButtonConfig = {
 	Name: string,
 	Description: string?,
 	Icon: string?,
+	Tooltip: string?,
+	Color: Color3?,
+	Disabled: boolean?,
 	Callback: (() -> ())?,
 }
 
@@ -133,6 +152,7 @@ export type ColorPickerConfig = {
 	Flag: string?,
 	Default: Color3?,
 	Alpha: number?,
+	Tooltip: string?,
 	Callback: ((color: Color3, alpha: number) -> ())?,
 }
 
@@ -171,21 +191,18 @@ function Utility.DeepCopy(t)
 	return n
 end
 
-function Utility.Lerp(a, b, t)
-	return a + (b - a) * t
+function Utility.Round(n: number, places: number?)
+	places = places or 0
+	local m = 10 ^ places
+	return math.floor(n * m + 0.5) / m
 end
 
-function Utility.Color3ToHex(c: Color3)
-	return string.format("#%02X%02X%02X", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
+function Utility.Clamp(n: number, min: number, max: number)
+	return math.clamp(n, min, max)
 end
 
-function Utility.HexToColor3(hex: string)
-	hex = hex:gsub("#", "")
-	return Color3.fromRGB(
-		tonumber(hex:sub(1, 2), 16) or 0,
-		tonumber(hex:sub(3, 4), 16) or 0,
-		tonumber(hex:sub(5, 6), 16) or 0
-	)
+function Utility.IsMobile()
+	return UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 end
 
 function Utility.GetTextBounds(text: string, font: Enum.Font, size: number, width: number?)
@@ -197,20 +214,6 @@ function Utility.GetTextBounds(text: string, font: Enum.Font, size: number, widt
 	local bounds = TextService:GetTextBoundsAsync(params)
 	params:Destroy()
 	return bounds
-end
-
-function Utility.IsMobile()
-	return UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-end
-
-function Utility.Round(n: number, places: number?)
-	places = places or 0
-	local m = 10 ^ places
-	return math.floor(n * m + 0.5) / m
-end
-
-function Utility.Clamp(n: number, min: number, max: number)
-	return math.clamp(n, min, max)
 end
 
 function Utility.Create(class: string, props: {[string]: any}?, children: {Instance}?)
@@ -233,6 +236,35 @@ function Utility.Create(class: string, props: {[string]: any}?, children: {Insta
 	return inst
 end
 
+-- Safe UIShadow helper (API available ~May 2026)
+function Utility.AddShadow(parent: Instance, opts: {
+	BlurRadius: number?,
+	Color: Color3?,
+	Offset: UDim2?,
+	Spread: UDim2?,
+	Transparency: number?,
+	ZIndex: number?,
+}?)
+	opts = opts or {}
+	local ok, shadow = pcall(function()
+		local s = Instance.new("UIShadow")
+		s.BlurRadius = UDim.new(0, opts.BlurRadius or 12)
+		s.Color = opts.Color or Color3.new(0, 0, 0)
+		s.Offset = opts.Offset or UDim2.fromOffset(0, 4)
+		s.Spread = opts.Spread or UDim2.fromOffset(0, 0)
+		s.Transparency = opts.Transparency or 0.55
+		s.ZIndex = opts.ZIndex or 0
+		s.Enabled = true
+		s.Parent = parent
+		return s
+	end)
+	if ok then
+		return shadow
+	end
+	-- Fallback: no shadow if API unavailable
+	return nil
+end
+
 ----------------------------------------------------------------
 -- Signal
 ----------------------------------------------------------------
@@ -240,28 +272,17 @@ local Signal = {}
 Signal.__index = Signal
 
 function Signal.new()
-	local self = setmetatable({
-		_connections = {},
-		_destroyed = false,
-	}, Signal)
-	return self
+	return setmetatable({ _connections = {}, _destroyed = false }, Signal)
 end
 
-function Signal:Connect(fn: (...any) -> ())
+function Signal:Connect(fn)
 	if self._destroyed then return { Disconnect = function() end } end
-	local conn = {
-		Connected = true,
-		_fn = fn,
-		_signal = self,
-	}
+	local conn = { Connected = true, _fn = fn, _signal = self }
 	function conn:Disconnect()
 		if not self.Connected then return end
 		self.Connected = false
-		local list = self._signal._connections
-		local idx = table.find(list, self)
-		if idx then
-			table.remove(list, idx)
-		end
+		local idx = table.find(self._signal._connections, self)
+		if idx then table.remove(self._signal._connections, idx) end
 	end
 	table.insert(self._connections, conn)
 	return conn
@@ -293,7 +314,7 @@ function Signal:DisconnectAll()
 end
 
 ----------------------------------------------------------------
--- Maid (Cleanup)
+-- Maid
 ----------------------------------------------------------------
 local Maid = {}
 Maid.__index = Maid
@@ -337,7 +358,7 @@ function Maid:Destroy()
 end
 
 ----------------------------------------------------------------
--- Theme System
+-- Theme
 ----------------------------------------------------------------
 local Themes: {[string]: ThemeTokens} = {
 	["macOS Dark"] = {
@@ -380,7 +401,7 @@ local Themes: {[string]: ThemeTokens} = {
 	},
 }
 
-local ThemeRegistry: {[Instance]: {string}} = {} -- Instance → {propertyName, ...}
+local ThemeRegistry: {[Instance]: {[string]: string}} = {}
 
 local function RegisterTheme(inst: Instance, prop: string, token: string)
 	if not ThemeRegistry[inst] then
@@ -419,7 +440,6 @@ function Library:SetTheme(theme: string | ThemeTokens)
 	else
 		return
 	end
-
 	local tokens = Library:GetTheme()
 	for inst in pairs(ThemeRegistry) do
 		if inst and inst.Parent then
@@ -428,8 +448,6 @@ function Library:SetTheme(theme: string | ThemeTokens)
 			ThemeRegistry[inst] = nil
 		end
 	end
-
-	-- Also update any live windows that keep a direct reference
 	for _, win in ipairs(Library.Windows) do
 		if win and not win.Destroyed then
 			win:_ApplyTheme(tokens)
@@ -438,17 +456,15 @@ function Library:SetTheme(theme: string | ThemeTokens)
 end
 
 ----------------------------------------------------------------
--- Tween System
+-- Tween
 ----------------------------------------------------------------
 local ActiveTweens: {[Instance]: {[string]: Tween}} = {}
 
 local function Tween(obj: Instance, goal: {[string]: any}, info: TweenInfo?)
 	info = info or TweenInfo.new(0.22, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-
 	if not ActiveTweens[obj] then
 		ActiveTweens[obj] = {}
 	end
-
 	for prop in pairs(goal) do
 		local existing = ActiveTweens[obj][prop]
 		if existing then
@@ -456,12 +472,10 @@ local function Tween(obj: Instance, goal: {[string]: any}, info: TweenInfo?)
 			ActiveTweens[obj][prop] = nil
 		end
 	end
-
 	local tw = TweenService:Create(obj, info, goal)
 	for prop in pairs(goal) do
 		ActiveTweens[obj][prop] = tw
 	end
-
 	tw.Completed:Connect(function()
 		if ActiveTweens[obj] then
 			for prop in pairs(goal) do
@@ -471,7 +485,6 @@ local function Tween(obj: Instance, goal: {[string]: any}, info: TweenInfo?)
 			end
 		end
 	end)
-
 	tw:Play()
 	return tw
 end
@@ -481,7 +494,7 @@ local function QuickTween(obj: Instance, goal: {[string]: any}, duration: number
 end
 
 ----------------------------------------------------------------
--- Icon System (simple resolver)
+-- Icon System
 ----------------------------------------------------------------
 local Icons = {
 	house      = "rbxassetid://10747373176",
@@ -524,15 +537,169 @@ local function CreateIcon(parent: Instance, name: string?, size: number?)
 end
 
 ----------------------------------------------------------------
--- Flag System
+-- Tooltip System
 ----------------------------------------------------------------
+local TooltipGui: ScreenGui? = nil
+local TooltipFrame: Frame? = nil
+local TooltipLabel: TextLabel? = nil
+local TooltipHideToken = 0
+
+local function EnsureTooltip()
+	if TooltipGui and TooltipGui.Parent then return end
+	TooltipGui = Utility.Create("ScreenGui", {
+		Name = "LibraryTooltip",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		DisplayOrder = 200,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	})
+	pcall(protectgui, TooltipGui)
+	TooltipGui.Parent = gethui()
+
+	TooltipFrame = Utility.Create("Frame", {
+		BackgroundColor3 = Library:GetTheme().SurfaceSecondary,
+		Size = UDim2.fromOffset(0, 0),
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Visible = false,
+		Parent = TooltipGui,
+		ZIndex = 100,
+	})
+	RegisterTheme(TooltipFrame, "BackgroundColor3", "SurfaceSecondary")
+	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = TooltipFrame })
+	Utility.Create("UIPadding", {
+		PaddingTop = UDim.new(0, 6),
+		PaddingBottom = UDim.new(0, 6),
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 10),
+		Parent = TooltipFrame,
+	})
+	Utility.AddShadow(TooltipFrame, {
+		BlurRadius = 10,
+		Transparency = 0.45,
+		Offset = UDim2.fromOffset(0, 3),
+	})
+
+	TooltipLabel = Utility.Create("TextLabel", {
+		BackgroundTransparency = 1,
+		Text = "",
+		TextColor3 = Library:GetTheme().Text,
+		Font = FONT,
+		TextSize = 12,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Parent = TooltipFrame,
+	})
+	RegisterTheme(TooltipLabel, "TextColor3", "Text")
+end
+
+local function ShowTooltip(text: string, anchor: GuiObject)
+	if not text or text == "" then return end
+	EnsureTooltip()
+	TooltipHideToken += 1
+	local token = TooltipHideToken
+
+	TooltipLabel.Text = text
+	TooltipFrame.Visible = true
+
+	task.defer(function()
+		if token ~= TooltipHideToken then return end
+		local absPos = anchor.AbsolutePosition
+		local absSize = anchor.AbsoluteSize
+		local tipSize = TooltipFrame.AbsoluteSize
+		local x = absPos.X + absSize.X / 2 - tipSize.X / 2
+		local y = absPos.Y - tipSize.Y - 8
+		if y < 8 then
+			y = absPos.Y + absSize.Y + 8
+		end
+		TooltipFrame.Position = UDim2.fromOffset(
+			math.clamp(x, 8, (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 1920) - tipSize.X - 8),
+			math.max(8, y)
+		)
+	end)
+end
+
+local function HideTooltip()
+	TooltipHideToken += 1
+	if TooltipFrame then
+		TooltipFrame.Visible = false
+	end
+end
+
+local function BindTooltip(target: GuiObject, textGetter: () -> string)
+	local maid = Maid.new()
+	maid:Give(target.MouseEnter:Connect(function()
+		local text = textGetter()
+		if text and text ~= "" then
+			ShowTooltip(text, target)
+		end
+	end))
+	maid:Give(target.MouseLeave:Connect(HideTooltip))
+	maid:Give(target.Destroying:Connect(function()
+		HideTooltip()
+		maid:Destroy()
+	end))
+	return maid
+end
+
+----------------------------------------------------------------
+-- Flag System (objects with .Value / .Text / .Type / :Set)
+----------------------------------------------------------------
+local FlagMeta = {}
+FlagMeta.__index = FlagMeta
+
+function FlagMeta:Set(value, silent)
+	if self._component and self._component.Set then
+		self._component:Set(value, silent)
+	else
+		self.Value = value
+	end
+end
+
+function FlagMeta:Get()
+	return self.Value
+end
+
+local function RegisterFlag(flagName: string, component, initialValue: any, displayText: string?, flagType: string?)
+	if not flagName or flagName == "" then return end
+
+	if Library.Flags[flagName] and Library.Flags[flagName]._component and Library.Flags[flagName]._component ~= component then
+		warn("[Library] Duplicate flag:", flagName)
+	end
+
+	local obj = setmetatable({
+		Value = initialValue,
+		Text = displayText or flagName,
+		Type = flagType or "Unknown",
+		_component = component,
+		_flag = flagName,
+	}, FlagMeta)
+
+	Library.Flags[flagName] = obj
+	return obj
+end
+
 function Library:SetFlag(flag: string, value: any)
 	if not flag or flag == "" then return end
-	Library.Flags[flag] = value
+	local obj = Library.Flags[flag]
+	if obj and obj.Set then
+		obj:Set(value)
+	else
+		-- create lightweight entry
+		Library.Flags[flag] = setmetatable({
+			Value = value,
+			Text = flag,
+			Type = "Raw",
+			_component = nil,
+			_flag = flag,
+		}, FlagMeta)
+	end
 end
 
 function Library:GetFlag(flag: string)
-	return Library.Flags[flag]
+	local obj = Library.Flags[flag]
+	if obj then
+		return obj.Value
+	end
+	return nil
 end
 
 function Library:HasFlag(flag: string)
@@ -544,14 +711,17 @@ function Library:ResetFlags()
 end
 
 function Library:GetConfig()
-	return Utility.DeepCopy(Library.Flags)
+	local cfg = {}
+	for k, obj in pairs(Library.Flags) do
+		cfg[k] = obj.Value
+	end
+	return cfg
 end
 
 function Library:LoadConfig(data: {[string]: any})
 	if type(data) ~= "table" then return end
 	for flag, value in pairs(data) do
 		Library:SetFlag(flag, value)
-		-- Notify any registered elements (simple broadcast)
 		for _, win in ipairs(Library.Windows) do
 			if win and not win.Destroyed then
 				win:_ApplyFlag(flag, value)
@@ -572,6 +742,7 @@ function Component.new(parentSection, config)
 	self.Config = config or {}
 	self.Maid = Maid.new()
 	self.Visible = true
+	self.Disabled = config.Disabled == true
 	self.Destroyed = false
 	self.Changed = Signal.new()
 	self.Maid:Give(self.Changed)
@@ -581,6 +752,9 @@ end
 function Component:Destroy()
 	if self.Destroyed then return end
 	self.Destroyed = true
+	if self.Config.Flag and Library.Flags[self.Config.Flag] and Library.Flags[self.Config.Flag]._component == self then
+		Library.Flags[self.Config.Flag]._component = nil
+	end
 	self.Maid:Destroy()
 	if self.Frame then
 		self.Frame:Destroy()
@@ -594,12 +768,32 @@ function Component:SetVisible(v: boolean)
 	end
 end
 
+function Component:SetDisabled(v: boolean)
+	self.Disabled = v == true
+	if self.Frame then
+		self.Frame.Active = not self.Disabled
+		if self._ApplyDisabled then
+			self:_ApplyDisabled(self.Disabled)
+		else
+			self.Frame.BackgroundTransparency = self.Disabled and 0.5 or 0
+			for _, d in ipairs(self.Frame:GetDescendants()) do
+				if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+					d.TextTransparency = self.Disabled and 0.45 or 0
+				elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
+					d.ImageTransparency = self.Disabled and 0.45 or 0
+				elseif d:IsA("GuiObject") and d.BackgroundTransparency < 1 then
+					d.BackgroundTransparency = self.Disabled and math.min(1, d.BackgroundTransparency + 0.35) or d.BackgroundTransparency
+				end
+			end
+		end
+	end
+end
+
 function Component:Get()
 	return self.Value
 end
 
 function Component:Set(value, silent)
-	-- overridden by subclasses
 end
 
 function Component:OnChanged(fn)
@@ -617,12 +811,10 @@ local function CreateSurface(parent, props)
 		Parent = parent,
 	})
 	RegisterTheme(frame, "BackgroundColor3", "Surface")
-
-	local corner = Utility.Create("UICorner", {
+	Utility.Create("UICorner", {
 		CornerRadius = UDim.new(0, props and props.Corner or DEFAULT_CORNER),
 		Parent = frame,
 	})
-
 	if props and props.Stroke then
 		local stroke = Utility.Create("UIStroke", {
 			Color = tokens.Border,
@@ -632,7 +824,6 @@ local function CreateSurface(parent, props)
 		})
 		RegisterTheme(stroke, "Color", "Border")
 	end
-
 	if props then
 		for k, v in pairs(props) do
 			if k ~= "Corner" and k ~= "Stroke" and k ~= "Parent" then
@@ -645,13 +836,12 @@ end
 
 local function CreateRow(parent, height)
 	height = height or ROW_HEIGHT
-	local row = Utility.Create("Frame", {
+	return Utility.Create("Frame", {
 		Name = "Row",
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, height),
 		Parent = parent,
 	})
-	return row
 end
 
 local function CreateLabel(parent, text, size, colorToken)
@@ -671,41 +861,103 @@ local function CreateLabel(parent, text, size, colorToken)
 	return lbl
 end
 
-----------------------------------------------------------------
--- Button Component
-----------------------------------------------------------------
 local Button = setmetatable({}, { __index = Component })
 Button.__index = Button
+
+local function EnsureButtonRow(section)
+	if not section._ButtonRow or section._ButtonRowCount >= 3 then
+		local row = Utility.Create("Frame", {
+			Name = "ButtonRow",
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 36),
+			Parent = section.Content,
+		})
+		Utility.Create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Left,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = row,
+		})
+		section._ButtonRow = row
+		section._ButtonRowCount = 0
+	end
+	return section._ButtonRow
+end
 
 function Button.new(section, config: ButtonConfig)
 	local self = Component.new(section, config)
 	setmetatable(self, Button)
 
 	local tokens = Library:GetTheme()
-	local frame = CreateRow(section.Content, 40)
+	local customColor = config.Color
+	local row = EnsureButtonRow(section)
+	section._ButtonRowCount = (section._ButtonRowCount or 0) + 1
+
+	local frame = Utility.Create("Frame", {
+		Name = "ButtonSlot",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1 / 3, -6, 1, 0),
+		Parent = row,
+	})
 	self.Frame = frame
+
+	local bgColor = customColor or tokens.SurfaceSecondary
+	local textColor = customColor and Color3.new(1, 1, 1) or tokens.Text
 
 	local btn = Utility.Create("TextButton", {
 		Name = "Button",
-		BackgroundColor3 = tokens.Accent,
-		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = bgColor,
+		Size = UDim2.fromScale(1, 1),
 		Text = config.Name or "Button",
-		TextColor3 = Color3.new(1, 1, 1),
+		TextColor3 = textColor,
 		Font = FONT_SEMIBOLD,
-		TextSize = 14,
+		TextSize = 13,
 		AutoButtonColor = false,
 		Parent = frame,
 	})
-	RegisterTheme(btn, "BackgroundColor3", "Accent")
+	if not customColor then
+		RegisterTheme(btn, "BackgroundColor3", "SurfaceSecondary")
+		RegisterTheme(btn, "TextColor3", "Text")
+	end
 	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = btn })
+	if not customColor then
+		Utility.Create("UIStroke", {
+			Color = tokens.Border,
+			Thickness = 1,
+			Parent = btn,
+		})
+	end
+	if customColor then
+		Utility.AddShadow(btn, {
+			BlurRadius = 8,
+			Transparency = 0.6,
+			Offset = UDim2.fromOffset(0, 2),
+			Color = bgColor,
+		})
+	end
+
+	local baseColor = bgColor
+	local hoverColor = customColor and Color3.new(
+		math.min(1, customColor.R + 0.08),
+		math.min(1, customColor.G + 0.08),
+		math.min(1, customColor.B + 0.08)
+	) or tokens.SurfaceTertiary
+	local pressColor = customColor and Color3.new(
+		math.max(0, customColor.R - 0.1),
+		math.max(0, customColor.G - 0.1),
+		math.max(0, customColor.B - 0.1)
+	) or tokens.Border
 
 	local function setState(state)
+		if self.Disabled then return end
 		if state == "hover" then
-			QuickTween(btn, { BackgroundColor3 = tokens.AccentHover })
+			QuickTween(btn, { BackgroundColor3 = hoverColor })
 		elseif state == "press" then
-			QuickTween(btn, { BackgroundColor3 = tokens.AccentPressed })
+			QuickTween(btn, { BackgroundColor3 = pressColor })
 		else
-			QuickTween(btn, { BackgroundColor3 = tokens.Accent })
+			QuickTween(btn, { BackgroundColor3 = baseColor })
 		end
 	end
 
@@ -714,14 +966,29 @@ function Button.new(section, config: ButtonConfig)
 	self.Maid:Give(btn.MouseButton1Down:Connect(function() setState("press") end))
 	self.Maid:Give(btn.MouseButton1Up:Connect(function() setState("hover") end))
 	self.Maid:Give(btn.Activated:Connect(function()
+		if self.Disabled then return end
 		Utility.SafeCallback(config.Callback)
 	end))
+
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(btn, function() return config.Tooltip end))
+	end
+
+	if self.Disabled then
+		self:SetDisabled(true)
+	end
+
+	self._ApplyDisabled = function(_, disabled)
+		btn.Active = not disabled
+		btn.TextTransparency = disabled and 0.45 or 0
+		btn.BackgroundTransparency = disabled and 0.35 or 0
+	end
 
 	return self
 end
 
 ----------------------------------------------------------------
--- Toggle Component
+-- Toggle
 ----------------------------------------------------------------
 local Toggle = setmetatable({}, { __index = Component })
 Toggle.__index = Toggle
@@ -732,7 +999,7 @@ function Toggle.new(section, config: ToggleConfig)
 
 	self.Value = config.Default == true
 	if config.Flag then
-		Library:SetFlag(config.Flag, self.Value)
+		RegisterFlag(config.Flag, self, self.Value, config.Name, "Toggle")
 	end
 
 	local tokens = Library:GetTheme()
@@ -755,7 +1022,6 @@ function Toggle.new(section, config: ToggleConfig)
 		desc.Position = UDim2.fromOffset(0, 22)
 	end
 
-	-- Track
 	local track = Utility.Create("Frame", {
 		Name = "Track",
 		BackgroundColor3 = self.Value and tokens.Accent or tokens.SurfaceTertiary,
@@ -765,6 +1031,7 @@ function Toggle.new(section, config: ToggleConfig)
 	})
 	RegisterTheme(track, "BackgroundColor3", self.Value and "Accent" or "SurfaceTertiary")
 	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = track })
+	Utility.AddShadow(track, { BlurRadius = 6, Transparency = 0.7, Offset = UDim2.fromOffset(0, 1) })
 
 	local knob = Utility.Create("Frame", {
 		Name = "Knob",
@@ -774,6 +1041,7 @@ function Toggle.new(section, config: ToggleConfig)
 		Parent = track,
 	})
 	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = knob })
+	Utility.AddShadow(knob, { BlurRadius = 4, Transparency = 0.5, Offset = UDim2.fromOffset(0, 1) })
 
 	local hit = Utility.Create("TextButton", {
 		BackgroundTransparency = 1,
@@ -794,8 +1062,8 @@ function Toggle.new(section, config: ToggleConfig)
 			Position = value and UDim2.new(1, -24, 0.5, -11) or UDim2.fromOffset(2, 2)
 		})
 
-		if config.Flag then
-			Library:SetFlag(config.Flag, value)
+		if config.Flag and Library.Flags[config.Flag] then
+			Library.Flags[config.Flag].Value = value
 		end
 		if not silent then
 			Utility.SafeCallback(config.Callback, value)
@@ -804,14 +1072,23 @@ function Toggle.new(section, config: ToggleConfig)
 	end
 
 	self.Maid:Give(hit.Activated:Connect(function()
+		if self.Disabled then return end
 		self:Set(not self.Value)
 	end))
+
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(hit, function() return config.Tooltip end))
+	end
+
+	if self.Disabled then
+		self:SetDisabled(true)
+	end
 
 	return self
 end
 
 ----------------------------------------------------------------
--- Slider Component
+-- Slider
 ----------------------------------------------------------------
 local Slider = setmetatable({}, { __index = Component })
 Slider.__index = Slider
@@ -825,7 +1102,7 @@ function Slider.new(section, config: SliderConfig)
 	local rounding = config.Rounding or 0
 	self.Value = Utility.Clamp(config.Default or min, min, max)
 	if config.Flag then
-		Library:SetFlag(config.Flag, self.Value)
+		RegisterFlag(config.Flag, self, self.Value, config.Name, "Slider")
 	end
 
 	local tokens = Library:GetTheme()
@@ -856,7 +1133,7 @@ function Slider.new(section, config: SliderConfig)
 
 	local fill = Utility.Create("Frame", {
 		BackgroundColor3 = tokens.Accent,
-		Size = UDim2.new((self.Value - min) / (max - min), 0, 1, 0),
+		Size = UDim2.new((self.Value - min) / math.max(max - min, 1e-6), 0, 1, 0),
 		Parent = track,
 	})
 	RegisterTheme(fill, "BackgroundColor3", "Accent")
@@ -865,16 +1142,12 @@ function Slider.new(section, config: SliderConfig)
 	local knob = Utility.Create("Frame", {
 		BackgroundColor3 = Color3.new(1, 1, 1),
 		Size = UDim2.fromOffset(16, 16),
-		Position = UDim2.new((self.Value - min) / (max - min), -8, 0.5, -8),
+		Position = UDim2.new((self.Value - min) / math.max(max - min, 1e-6), -8, 0.5, -8),
 		Parent = track,
 		ZIndex = 2,
 	})
 	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = knob })
-	Utility.Create("UIStroke", {
-		Color = tokens.Border,
-		Thickness = 1,
-		Parent = knob,
-	})
+	Utility.AddShadow(knob, { BlurRadius = 5, Transparency = 0.45, Offset = UDim2.fromOffset(0, 1) })
 
 	local dragging = false
 
@@ -897,8 +1170,8 @@ function Slider.new(section, config: SliderConfig)
 		QuickTween(knob, { Position = UDim2.new(pct, -8, 0.5, -8) })
 		valueLbl.Text = tostring(value) .. (config.Suffix or "")
 
-		if config.Flag then
-			Library:SetFlag(config.Flag, value)
+		if config.Flag and Library.Flags[config.Flag] then
+			Library.Flags[config.Flag].Value = value
 		end
 		if not silent then
 			Utility.SafeCallback(config.Callback, value)
@@ -913,7 +1186,6 @@ function Slider.new(section, config: SliderConfig)
 			updateFromX(input.Position.X)
 		end
 	end))
-
 	self.Maid:Give(UserInputService.InputChanged:Connect(function(input)
 		if not dragging then return end
 		if input.UserInputType == Enum.UserInputType.MouseMovement
@@ -921,7 +1193,6 @@ function Slider.new(section, config: SliderConfig)
 			updateFromX(input.Position.X)
 		end
 	end))
-
 	self.Maid:Give(UserInputService.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.Touch then
@@ -929,11 +1200,19 @@ function Slider.new(section, config: SliderConfig)
 		end
 	end))
 
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(frame, function() return config.Tooltip end))
+	end
+
+	if self.Disabled then
+		self:SetDisabled(true)
+	end
+
 	return self
 end
 
 ----------------------------------------------------------------
--- Dropdown Component
+-- Dropdown
 ----------------------------------------------------------------
 local Dropdown = setmetatable({}, { __index = Component })
 Dropdown.__index = Dropdown
@@ -953,7 +1232,7 @@ function Dropdown.new(section, config: DropdownConfig)
 	end
 
 	if config.Flag then
-		Library:SetFlag(config.Flag, self.Value)
+		RegisterFlag(config.Flag, self, self.Value, config.Name, multi and "MultiDropdown" or "Dropdown")
 	end
 
 	local tokens = Library:GetTheme()
@@ -993,9 +1272,7 @@ function Dropdown.new(section, config: DropdownConfig)
 
 	local chevron = CreateIcon(trigger, "chevron", 14)
 	chevron.Position = UDim2.new(1, -22, 0.5, -7)
-	chevron.Rotation = 0
 
-	-- List container (created lazily)
 	local listFrame = nil
 
 	local function refreshDisplay()
@@ -1039,6 +1316,7 @@ function Dropdown.new(section, config: DropdownConfig)
 			Thickness = 1,
 			Parent = listFrame,
 		})
+		Utility.AddShadow(listFrame, { BlurRadius = 12, Transparency = 0.5, Offset = UDim2.fromOffset(0, 4) })
 
 		local scroll = Utility.Create("ScrollingFrame", {
 			BackgroundTransparency = 1,
@@ -1048,10 +1326,8 @@ function Dropdown.new(section, config: DropdownConfig)
 			BorderSizePixel = 0,
 			Parent = listFrame,
 		})
-
-		local layout = Utility.Create("UIListLayout", {
+		Utility.Create("UIListLayout", {
 			SortOrder = Enum.SortOrder.LayoutOrder,
-			Padding = UDim.new(0, 0),
 			Parent = scroll,
 		})
 
@@ -1092,7 +1368,7 @@ function Dropdown.new(section, config: DropdownConfig)
 					end
 					self:Set(self.Value)
 					closeList()
-					openList() -- refresh selection colors
+					openList()
 				else
 					self:Set(val)
 					closeList()
@@ -1109,8 +1385,8 @@ function Dropdown.new(section, config: DropdownConfig)
 			self.Value = value
 		end
 		refreshDisplay()
-		if config.Flag then
-			Library:SetFlag(config.Flag, self.Value)
+		if config.Flag and Library.Flags[config.Flag] then
+			Library.Flags[config.Flag].Value = self.Value
 		end
 		if not silent then
 			Utility.SafeCallback(config.Callback, self.Value)
@@ -1127,18 +1403,22 @@ function Dropdown.new(section, config: DropdownConfig)
 	end
 
 	self.Maid:Give(trigger.Activated:Connect(function()
-		if self.Open then
-			closeList()
-		else
-			openList()
-		end
+		if self.Open then closeList() else openList() end
 	end))
+
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(trigger, function() return config.Tooltip end))
+	end
+
+	if self.Disabled then
+		self:SetDisabled(true)
+	end
 
 	return self
 end
 
 ----------------------------------------------------------------
--- Input Component
+-- Input
 ----------------------------------------------------------------
 local Input = setmetatable({}, { __index = Component })
 Input.__index = Input
@@ -1149,7 +1429,7 @@ function Input.new(section, config: InputConfig)
 
 	self.Value = config.Default or ""
 	if config.Flag then
-		Library:SetFlag(config.Flag, self.Value)
+		RegisterFlag(config.Flag, self, self.Value, config.Name, "Input")
 	end
 
 	local tokens = Library:GetTheme()
@@ -1198,8 +1478,8 @@ function Input.new(section, config: InputConfig)
 		value = tostring(value or "")
 		self.Value = value
 		box.Text = value
-		if config.Flag then
-			Library:SetFlag(config.Flag, value)
+		if config.Flag and Library.Flags[config.Flag] then
+			Library.Flags[config.Flag].Value = value
 		end
 		if not silent then
 			Utility.SafeCallback(config.Callback, value)
@@ -1207,7 +1487,7 @@ function Input.new(section, config: InputConfig)
 		end
 	end
 
-	self.Maid:Give(box.FocusLost:Connect(function(enter)
+	self.Maid:Give(box.FocusLost:Connect(function()
 		local text = box.Text
 		if config.Numeric then
 			text = tostring(tonumber(text) or self.Value)
@@ -1216,11 +1496,19 @@ function Input.new(section, config: InputConfig)
 		self:Set(text)
 	end))
 
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(box, function() return config.Tooltip end))
+	end
+
+	if self.Disabled then
+		self:SetDisabled(true)
+	end
+
 	return self
 end
 
 ----------------------------------------------------------------
--- Keybind Component
+-- Keybind
 ----------------------------------------------------------------
 local Keybind = setmetatable({}, { __index = Component })
 Keybind.__index = Keybind
@@ -1235,7 +1523,7 @@ function Keybind.new(section, config: KeybindConfig)
 	self.Mode = config.Mode or "Toggle"
 	self.Active = false
 	if config.Flag then
-		Library:SetFlag(config.Flag, self.Value)
+		RegisterFlag(config.Flag, self, self.Value, config.Name, "Keybind")
 	end
 
 	local tokens = Library:GetTheme()
@@ -1264,8 +1552,8 @@ function Keybind.new(section, config: KeybindConfig)
 		if self.Destroyed then return end
 		self.Value = key
 		btn.Text = (key and key.Name) or "None"
-		if config.Flag then
-			Library:SetFlag(config.Flag, key)
+		if config.Flag and Library.Flags[config.Flag] then
+			Library.Flags[config.Flag].Value = key
 		end
 		if not silent then
 			Utility.SafeCallback(config.Callback, key)
@@ -1303,7 +1591,6 @@ function Keybind.new(section, config: KeybindConfig)
 			return
 		end
 
-		-- Activation
 		if self.Value and not gp then
 			local match = (input.KeyCode == self.Value) or (input.UserInputType == self.Value)
 			if match then
@@ -1330,11 +1617,19 @@ function Keybind.new(section, config: KeybindConfig)
 		end
 	end))
 
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(btn, function() return config.Tooltip end))
+	end
+
+	if self.Disabled then
+		self:SetDisabled(true)
+	end
+
 	return self
 end
 
 ----------------------------------------------------------------
--- Label / Paragraph / Divider
+-- Label / Paragraph / Divider / ColorPicker / ProgressBar
 ----------------------------------------------------------------
 local Label = setmetatable({}, { __index = Component })
 Label.__index = Label
@@ -1342,7 +1637,6 @@ Label.__index = Label
 function Label.new(section, config)
 	local self = Component.new(section, config)
 	setmetatable(self, Label)
-
 	local frame = CreateRow(section.Content, 24)
 	self.Frame = frame
 	local lbl = CreateLabel(frame, config.Name or config.Text or "", 13, "TextSecondary")
@@ -1352,9 +1646,7 @@ function Label.new(section, config)
 end
 
 function Label:SetText(text)
-	if self.Label then
-		self.Label.Text = text
-	end
+	if self.Label then self.Label.Text = text end
 end
 
 local Paragraph = setmetatable({}, { __index = Component })
@@ -1363,18 +1655,15 @@ Paragraph.__index = Paragraph
 function Paragraph.new(section, config)
 	local self = Component.new(section, config)
 	setmetatable(self, Paragraph)
-
 	local text = config.Text or config.Name or ""
 	local bounds = Utility.GetTextBounds(text, FONT, 13, 280)
 	local h = math.max(28, bounds.Y + 8)
-
 	local frame = Utility.Create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, h),
 		Parent = section.Content,
 	})
 	self.Frame = frame
-
 	local lbl = CreateLabel(frame, text, 13, "TextSecondary")
 	lbl.Size = UDim2.fromScale(1, 1)
 	lbl.TextWrapped = true
@@ -1385,41 +1674,93 @@ end
 local Divider = setmetatable({}, { __index = Component })
 Divider.__index = Divider
 
-function Divider.new(section)
-	local self = Component.new(section, {})
+function Divider.new(section, opts)
+	opts = opts or {}
+	local self = Component.new(section, opts)
 	setmetatable(self, Divider)
 
+	local tokens = Library:GetTheme()
+	local height = opts.Text and 22 or 16
 	local frame = Utility.Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 16),
+		Size = UDim2.new(1, 0, 0, height),
 		Parent = section.Content,
 	})
 	self.Frame = frame
 
 	local line = Utility.Create("Frame", {
-		BackgroundColor3 = Library:GetTheme().Border,
-		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = tokens.Border,
+		Size = UDim2.new(1, 0, 0, opts.Thickness or 1),
 		Position = UDim2.new(0, 0, 0.5, 0),
+		AnchorPoint = Vector2.new(0, 0.5),
 		Parent = frame,
 	})
 	RegisterTheme(line, "BackgroundColor3", "Border")
+
+	if opts.Rounded then
+		Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = line })
+	end
+
+	if opts.Fade then
+		local grad = Utility.Create("UIGradient", {
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.2, 0),
+				NumberSequenceKeypoint.new(0.8, 0),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+			Parent = line,
+		})
+	end
+
+	if opts.Text and opts.Text ~= "" then
+		local lbl = CreateLabel(frame, opts.Text, 11, "TextTertiary")
+		lbl.Size = UDim2.fromOffset(0, 16)
+		lbl.AutomaticSize = Enum.AutomaticSize.X
+		lbl.AnchorPoint = Vector2.new(0.5, 0.5)
+		lbl.Position = UDim2.fromScale(0.5, 0.5)
+		lbl.BackgroundColor3 = tokens.Surface
+		lbl.BackgroundTransparency = 0
+		lbl.TextXAlignment = Enum.TextXAlignment.Center
+		RegisterTheme(lbl, "BackgroundColor3", "Surface")
+		Utility.Create("UIPadding", {
+			PaddingLeft = UDim.new(0, 8),
+			PaddingRight = UDim.new(0, 8),
+			Parent = lbl,
+		})
+		line.Size = UDim2.new(1, 0, 0, opts.Thickness or 1)
+	end
+
 	return self
 end
 
-----------------------------------------------------------------
--- ColorPicker (simplified modern)
-----------------------------------------------------------------
+local Space = setmetatable({}, { __index = Component })
+Space.__index = Space
+
+function Space.new(section, opts)
+	opts = opts or {}
+	local self = Component.new(section, opts)
+	setmetatable(self, Space)
+	local size = opts.Size or 8
+	local frame = Utility.Create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, size),
+		Parent = section.Content,
+	})
+	self.Frame = frame
+	return self
+end
+
 local ColorPicker = setmetatable({}, { __index = Component })
 ColorPicker.__index = ColorPicker
 
 function ColorPicker.new(section, config: ColorPickerConfig)
 	local self = Component.new(section, config)
 	setmetatable(self, ColorPicker)
-
 	self.Value = config.Default or Color3.fromRGB(10, 132, 255)
 	self.Alpha = config.Alpha or 1
 	if config.Flag then
-		Library:SetFlag(config.Flag, self.Value)
+		RegisterFlag(config.Flag, self, self.Value, config.Name, "ColorPicker")
 	end
 
 	local tokens = Library:GetTheme()
@@ -1436,18 +1777,15 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 		Parent = frame,
 	})
 	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = preview })
-	Utility.Create("UIStroke", {
-		Color = tokens.Border,
-		Thickness = 1,
-		Parent = preview,
-	})
+	Utility.Create("UIStroke", { Color = tokens.Border, Thickness = 1, Parent = preview })
+	Utility.AddShadow(preview, { BlurRadius = 6, Transparency = 0.55, Offset = UDim2.fromOffset(0, 1) })
 
 	function self:Set(color: Color3, silent: boolean?)
 		if self.Destroyed then return end
 		self.Value = color
 		preview.BackgroundColor3 = color
-		if config.Flag then
-			Library:SetFlag(config.Flag, color)
+		if config.Flag and Library.Flags[config.Flag] then
+			Library.Flags[config.Flag].Value = color
 		end
 		if not silent then
 			Utility.SafeCallback(config.Callback, color, self.Alpha)
@@ -1455,7 +1793,6 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 		end
 	end
 
-	-- Simple click cycles through a small palette for demo (full HSV picker would be larger)
 	local palette = {
 		Color3.fromRGB(10, 132, 255),
 		Color3.fromRGB(48, 209, 88),
@@ -1466,7 +1803,6 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 		Color3.fromRGB(28, 28, 30),
 	}
 	local idx = 1
-
 	local hit = Utility.Create("TextButton", {
 		BackgroundTransparency = 1,
 		Size = UDim2.fromScale(1, 1),
@@ -1478,19 +1814,23 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 		self:Set(palette[idx])
 	end))
 
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(preview, function() return config.Tooltip end))
+	end
+
+	if self.Disabled then
+		self:SetDisabled(true)
+	end
+
 	return self
 end
 
-----------------------------------------------------------------
--- ProgressBar
-----------------------------------------------------------------
 local ProgressBar = setmetatable({}, { __index = Component })
 ProgressBar.__index = ProgressBar
 
 function ProgressBar.new(section, config)
 	local self = Component.new(section, config)
 	setmetatable(self, ProgressBar)
-
 	self.Value = config.Default or 0
 	local tokens = Library:GetTheme()
 
@@ -1541,27 +1881,45 @@ function ProgressBar.new(section, config)
 end
 
 ----------------------------------------------------------------
--- Section
+-- Section (Type + Collapse)
 ----------------------------------------------------------------
 local Section = {}
 Section.__index = Section
 
-function Section.new(tab, config)
+function Section.new(tab, config: SectionConfig)
 	local self = setmetatable({}, Section)
 	self.Tab = tab
 	self.Name = config.Name or "Section"
+	self.Type = (config.Type or "full"):lower()
+	if self.Type ~= "left" and self.Type ~= "right" and self.Type ~= "full" then
+		self.Type = "full"
+	end
 	self.Components = {}
 	self.Maid = Maid.new()
 	self.Destroyed = false
+	self.Collapsed = false
 
 	local tokens = Library:GetTheme()
+	local collapseCfg = config.Collapse or {}
+	local collapseEnabled = collapseCfg.Enabled == true
+	local startCollapsed = collapseCfg.Default == true
+
+	-- Parent container depending on Type
+	local parentContainer
+	if self.Type == "left" then
+		parentContainer = tab.LeftColumn
+	elseif self.Type == "right" then
+		parentContainer = tab.RightColumn
+	else
+		parentContainer = tab.Content
+	end
 
 	local container = Utility.Create("Frame", {
 		Name = "Section_" .. self.Name,
 		BackgroundColor3 = tokens.Surface,
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		Parent = tab.Content,
+		Parent = parentContainer,
 	})
 	RegisterTheme(container, "BackgroundColor3", "Surface")
 	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 12), Parent = container })
@@ -1570,8 +1928,13 @@ function Section.new(tab, config)
 		Thickness = 1,
 		Parent = container,
 	})
+	Utility.AddShadow(container, {
+		BlurRadius = 10,
+		Transparency = 0.65,
+		Offset = UDim2.fromOffset(0, 2),
+	})
 	Utility.Create("UIPadding", {
-		PaddingTop = UDim.new(0, 12),
+		PaddingTop = UDim.new(0, 10),
 		PaddingBottom = UDim.new(0, 12),
 		PaddingLeft = UDim.new(0, 14),
 		PaddingRight = UDim.new(0, 14),
@@ -1584,37 +1947,102 @@ function Section.new(tab, config)
 		Parent = container,
 	})
 
-	local header = CreateLabel(container, self.Name, 13, "TextSecondary")
-	header.Size = UDim2.new(1, 0, 0, 18)
+	-- Header (clickable when collapsible)
+	local headerBtn = Utility.Create("TextButton", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 22),
+		Text = "",
+		AutoButtonColor = false,
+		LayoutOrder = 0,
+		Parent = container,
+	})
+
+	local header = CreateLabel(headerBtn, self.Name, 13, "TextSecondary")
+	header.Size = UDim2.new(1, collapseEnabled and -24 or 0, 1, 0)
 	header.Font = FONT_SEMIBOLD
-	header.LayoutOrder = 0
+	header.TextXAlignment = Enum.TextXAlignment.Left
+
+	local chevron
+	if collapseEnabled then
+		chevron = CreateIcon(headerBtn, "chevron", 14)
+		chevron.Position = UDim2.new(1, -16, 0.5, -7)
+		chevron.Rotation = startCollapsed and -90 or 0
+	end
+
+	-- Content holder (for collapse)
+	local contentHolder = Utility.Create("Frame", {
+		Name = "ContentHolder",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 1,
+		Visible = not startCollapsed,
+		Parent = container,
+	})
+	Utility.Create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 6),
+		Parent = contentHolder,
+	})
 
 	self.Frame = container
-	self.Content = container
+	self.Content = contentHolder
 	self.Header = header
+	self.Collapsed = startCollapsed
+
+	if collapseEnabled then
+		self.Maid:Give(headerBtn.Activated:Connect(function()
+			self:SetCollapsed(not self.Collapsed)
+		end))
+	end
+
+	function self:SetCollapsed(collapsed: boolean)
+		if not collapseEnabled then return end
+		self.Collapsed = collapsed
+		contentHolder.Visible = not collapsed
+		if chevron then
+			QuickTween(chevron, { Rotation = collapsed and -90 or 0 })
+		end
+	end
+
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(headerBtn, function() return config.Tooltip end))
+	end
 
 	return self
 end
 
+local function ResetButtonRow(section)
+	section._ButtonRow = nil
+	section._ButtonRowCount = 0
+end
+
 function Section:AddButton(config)
+	if type(config) == "string" then
+		config = { Name = config }
+	end
+	config = config or {}
 	local c = Button.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddToggle(config)
+	ResetButtonRow(self)
 	local c = Toggle.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddSlider(config)
+	ResetButtonRow(self)
 	local c = Slider.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddDropdown(config)
+	ResetButtonRow(self)
 	local c = Dropdown.new(self, config)
 	table.insert(self.Components, c)
 	return c
@@ -1627,42 +2055,57 @@ function Section:AddMultiDropdown(config)
 end
 
 function Section:AddInput(config)
+	ResetButtonRow(self)
 	local c = Input.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddKeybind(config)
+	ResetButtonRow(self)
 	local c = Keybind.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddLabel(config)
+	ResetButtonRow(self)
 	local c = Label.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddParagraph(config)
+	ResetButtonRow(self)
 	local c = Paragraph.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
-function Section:AddDivider()
-	local c = Divider.new(self)
+function Section:AddDivider(opts)
+	ResetButtonRow(self)
+	local c = Divider.new(self, type(opts) == "table" and opts or {})
+	table.insert(self.Components, c)
+	return c
+end
+
+function Section:AddSpace(sizeOrOpts)
+	ResetButtonRow(self)
+	local opts = type(sizeOrOpts) == "number" and { Size = sizeOrOpts } or (sizeOrOpts or {})
+	local c = Space.new(self, opts)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddColorPicker(config)
+	ResetButtonRow(self)
 	local c = ColorPicker.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddProgressBar(config)
+	ResetButtonRow(self)
 	local c = ProgressBar.new(self, config)
 	table.insert(self.Components, c)
 	return c
@@ -1691,19 +2134,20 @@ function Tab.new(window, config)
 	self.Window = window
 	self.Name = config.Name or "Tab"
 	self.Icon = config.Icon
+	self.Tooltip = config.Tooltip
 	self.Sections = {}
 	self.Maid = Maid.new()
 	self.Destroyed = false
 	self.Active = false
 
 	local tokens = Library:GetTheme()
+	local compact = window.CompactTab == true
 
-	-- Sidebar button
 	local btn = Utility.Create("TextButton", {
 		Name = "TabBtn_" .. self.Name,
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -16, 0, 36),
-		Position = UDim2.fromOffset(8, 0),
+		Size = UDim2.new(1, compact and -8 or -16, 0, compact and 40 or 36),
+		Position = UDim2.fromOffset(compact and 4 or 8, 0),
 		Text = "",
 		AutoButtonColor = false,
 		Parent = window.SidebarList,
@@ -1722,17 +2166,23 @@ function Tab.new(window, config)
 	self.AccentBar = accentBar
 
 	if self.Icon then
-		local icon = CreateIcon(btn, self.Icon, 16)
-		icon.Position = UDim2.fromOffset(12, 10)
+		local icon = CreateIcon(btn, self.Icon, compact and 18 or 16)
+		if compact then
+			icon.AnchorPoint = Vector2.new(0.5, 0.5)
+			icon.Position = UDim2.fromScale(0.5, 0.5)
+		else
+			icon.Position = UDim2.fromOffset(12, 10)
+		end
 		self.IconLabel = icon
 	end
 
 	local lbl = CreateLabel(btn, self.Name, 14, "TextSecondary")
 	lbl.Size = UDim2.new(1, -40, 1, 0)
 	lbl.Position = UDim2.fromOffset(self.Icon and 36 or 12, 0)
+	lbl.Visible = not compact
 	self.Label = lbl
 
-	-- Content page
+	-- Content page with columns support
 	local page = Utility.Create("ScrollingFrame", {
 		Name = "Page_" .. self.Name,
 		BackgroundTransparency = 1,
@@ -1753,12 +2203,77 @@ function Tab.new(window, config)
 		PaddingRight = UDim.new(0, 12),
 		Parent = page,
 	})
-	Utility.Create("UIListLayout", {
+
+	-- Main vertical layout for full-width + row of columns
+	local mainLayout = Utility.Create("UIListLayout", {
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		Padding = UDim.new(0, SECTION_GAP),
 		Parent = page,
 	})
-	self.Content = page
+
+	-- Full-width container
+	local fullContainer = Utility.Create("Frame", {
+		Name = "FullContainer",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 1,
+		Parent = page,
+	})
+	Utility.Create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, SECTION_GAP),
+		Parent = fullContainer,
+	})
+	self.Content = fullContainer -- default parent for Type=full
+
+	-- Two-column row
+	local columnsRow = Utility.Create("Frame", {
+		Name = "ColumnsRow",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 2,
+		Parent = page,
+	})
+	Utility.Create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, SECTION_GAP),
+		Parent = columnsRow,
+	})
+
+	local leftCol = Utility.Create("Frame", {
+		Name = "LeftColumn",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0.5, -SECTION_GAP / 2, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 1,
+		Parent = columnsRow,
+	})
+	Utility.Create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, SECTION_GAP),
+		Parent = leftCol,
+	})
+	self.LeftColumn = leftCol
+
+	local rightCol = Utility.Create("Frame", {
+		Name = "RightColumn",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0.5, -SECTION_GAP / 2, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		LayoutOrder = 2,
+		Parent = columnsRow,
+	})
+	Utility.Create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, SECTION_GAP),
+		Parent = rightCol,
+	})
+	self.RightColumn = rightCol
+
+	self.Page = page
 
 	self.Maid:Give(btn.Activated:Connect(function()
 		window:SelectTab(self)
@@ -1775,13 +2290,18 @@ function Tab.new(window, config)
 		end
 	end))
 
+	-- Tooltip on tab
+	if self.Tooltip then
+		self.Maid:Give(BindTooltip(btn, function() return self.Tooltip end))
+	end
+
 	return self
 end
 
 function Tab:SetActive(active: boolean)
 	self.Active = active
 	local tokens = Library:GetTheme()
-	self.Content.Visible = active
+	self.Page.Visible = active
 	self.AccentBar.Visible = active
 	self.Label.TextColor3 = active and tokens.Text or tokens.TextSecondary
 	if self.IconLabel then
@@ -1801,75 +2321,66 @@ function Tab:AddSection(config)
 	return sec
 end
 
--- Convenience passthrough so users can do Tab:AddToggle directly
+-- Convenience passthroughs
 function Tab:AddToggle(config)
 	local sec = self.Sections[#self.Sections]
-	if not sec then
-		sec = self:AddSection({ Name = "General" })
-	end
+	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddToggle(config)
 end
-
 function Tab:AddButton(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddButton(config)
 end
-
 function Tab:AddSlider(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddSlider(config)
 end
-
 function Tab:AddDropdown(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddDropdown(config)
 end
-
 function Tab:AddMultiDropdown(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddMultiDropdown(config)
 end
-
 function Tab:AddInput(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddInput(config)
 end
-
 function Tab:AddKeybind(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddKeybind(config)
 end
-
 function Tab:AddLabel(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddLabel(config)
 end
-
 function Tab:AddParagraph(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddParagraph(config)
 end
-
-function Tab:AddDivider()
-	local sec = self.Sections[#self.Sections]
-	if not sec then sec = self:AddSection({ Name = "General" }) end
-	return sec:AddDivider()
+function Tab:AddDivider(opts)
+	local host = { Content = self.Content, Components = {}, _ButtonRow = nil, _ButtonRowCount = 0 }
+	return Divider.new(host, type(opts) == "table" and opts or {})
 end
-
+function Tab:AddSpace(sizeOrOpts)
+	local host = { Content = self.Content, Components = {}, _ButtonRow = nil, _ButtonRowCount = 0 }
+	local opts = type(sizeOrOpts) == "number" and { Size = sizeOrOpts } or (sizeOrOpts or {})
+	return Space.new(host, opts)
+end
 function Tab:AddColorPicker(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddColorPicker(config)
 end
-
 function Tab:AddProgressBar(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
@@ -1884,7 +2395,7 @@ function Tab:Destroy()
 	end
 	self.Maid:Destroy()
 	if self.Button then self.Button:Destroy() end
-	if self.Content then self.Content:Destroy() end
+	if self.Page then self.Page:Destroy() end
 end
 
 ----------------------------------------------------------------
@@ -1920,6 +2431,11 @@ local function CreateNotification(config)
 		Thickness = 1,
 		Parent = gui,
 	})
+	Utility.AddShadow(gui, {
+		BlurRadius = 16,
+		Transparency = 0.4,
+		Offset = UDim2.fromOffset(0, 6),
+	})
 	Utility.Create("UIPadding", {
 		PaddingTop = UDim.new(0, 14),
 		PaddingBottom = UDim.new(0, 14),
@@ -1950,7 +2466,6 @@ local function CreateNotification(config)
 		desc.TextWrapped = true
 	end
 
-	-- Animate in
 	gui.Position = UDim2.new(1, 40, 0, 20)
 	QuickTween(gui, { Position = UDim2.new(1, -20, 0, 20 + (#Library.Notifications * 90)) })
 
@@ -1970,7 +2485,7 @@ local function CreateNotification(config)
 end
 
 ----------------------------------------------------------------
--- Modal / Confirm
+-- Modal
 ----------------------------------------------------------------
 local function CreateModal(window, config)
 	local tokens = Library:GetTheme()
@@ -1999,6 +2514,11 @@ local function CreateModal(window, config)
 		Color = tokens.Border,
 		Thickness = 1,
 		Parent = modal,
+	})
+	Utility.AddShadow(modal, {
+		BlurRadius = 24,
+		Transparency = 0.35,
+		Offset = UDim2.fromOffset(0, 8),
 	})
 	Utility.Create("UIPadding", {
 		PaddingTop = UDim.new(0, 20),
@@ -2056,7 +2576,6 @@ local function CreateModal(window, config)
 			RegisterTheme(b, "TextColor3", "Text")
 		end
 		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = b })
-
 		b.Activated:Connect(function()
 			Utility.SafeCallback(bcfg.Callback)
 			close()
@@ -2082,12 +2601,14 @@ function Window.new(library, config: WindowConfig)
 	self.Minimized = false
 	self.DPI = 1
 	self.SearchEnabled = false
+	self.ShowTabName = config.ShowTabName == true
+	self.CompactTab = config.CompactTab == true
+	self.CurrentTab = nil
 
 	local tokens = library:GetTheme()
 	local size = config.Size or UDim2.fromOffset(720, 480)
 	local minSize = config.MinSize or Vector2.new(480, 320)
 
-	-- Root ScreenGui
 	local screenGui = Utility.Create("ScreenGui", {
 		Name = "LibraryUI",
 		ResetOnSpawn = false,
@@ -2099,14 +2620,12 @@ function Window.new(library, config: WindowConfig)
 	screenGui.Parent = gethui()
 	self.ScreenGui = screenGui
 
-	-- UIScale for DPI
 	local uiScale = Utility.Create("UIScale", {
 		Scale = 1,
 		Parent = screenGui,
 	})
 	self.UIScale = uiScale
 
-	-- Main window frame
 	local root = Utility.Create("Frame", {
 		Name = "Window",
 		BackgroundTransparency = 1,
@@ -2117,22 +2636,7 @@ function Window.new(library, config: WindowConfig)
 	})
 	self.Root = root
 
-	-- Shadow
-	local shadow = Utility.Create("ImageLabel", {
-		Name = "Shadow",
-		BackgroundTransparency = 1,
-		Image = "rbxassetid://6014261993",
-		ImageColor3 = tokens.Shadow,
-		ImageTransparency = 0.6,
-		ScaleType = Enum.ScaleType.Slice,
-		SliceCenter = Rect.new(49, 49, 450, 450),
-		Size = UDim2.new(1, 40, 1, 40),
-		Position = UDim2.fromOffset(-20, -16),
-		Parent = root,
-		ZIndex = 0,
-	})
-
-	-- Surface
+	-- Native UIShadow on surface instead of image
 	local surface = Utility.Create("Frame", {
 		Name = "Surface",
 		BackgroundColor3 = tokens.Background,
@@ -2147,6 +2651,12 @@ function Window.new(library, config: WindowConfig)
 		Thickness = 1,
 		Parent = surface,
 	})
+	Utility.AddShadow(surface, {
+		BlurRadius = 28,
+		Transparency = 0.4,
+		Offset = UDim2.fromOffset(0, 10),
+		Spread = UDim2.fromOffset(4, 4),
+	})
 	self.Surface = surface
 
 	-- Header
@@ -2159,7 +2669,7 @@ function Window.new(library, config: WindowConfig)
 	RegisterTheme(header, "BackgroundColor3", "Surface")
 	self.Header = header
 
-	-- Traffic lights (macOS style)
+	-- Traffic lights with UIShadow
 	local lights = Utility.Create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.fromOffset(70, 14),
@@ -2181,13 +2691,19 @@ function Window.new(library, config: WindowConfig)
 			Parent = lights,
 		})
 		Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = l })
+		Utility.AddShadow(l, {
+			BlurRadius = 4,
+			Transparency = 0.35,
+			Offset = UDim2.fromOffset(0, 1),
+			Color = color,
+		})
 		l.Activated:Connect(callback)
 		return l
 	end
 
-	makeLight(Color3.fromRGB(255, 95, 87), function() self:Destroy() end) -- close
-	makeLight(Color3.fromRGB(255, 189, 46), function() self:Minimize() end) -- minimize
-	makeLight(Color3.fromRGB(40, 200, 64), function() end) -- maximize placeholder
+	makeLight(Color3.fromRGB(255, 95, 87), function() self:Destroy() end)
+	makeLight(Color3.fromRGB(255, 189, 46), function() self:Minimize() end)
+	makeLight(Color3.fromRGB(40, 200, 64), function() end)
 
 	-- Title
 	local titleLbl = CreateLabel(header, config.Title or "Window", 15, "Text")
@@ -2202,7 +2718,15 @@ function Window.new(library, config: WindowConfig)
 	subLbl.Position = UDim2.fromOffset(90, 26)
 	self.SubtitleLabel = subLbl
 
-	-- Search box (optional)
+	-- Tab name indicator (optional)
+	local tabNameLbl = CreateLabel(header, "", 12, "TextSecondary")
+	tabNameLbl.Size = UDim2.fromOffset(120, 16)
+	tabNameLbl.Position = UDim2.new(1, -300, 0.5, -8)
+	tabNameLbl.TextXAlignment = Enum.TextXAlignment.Right
+	tabNameLbl.Visible = self.ShowTabName
+	self.TabNameLabel = tabNameLbl
+
+	-- Search
 	local searchBox = Utility.Create("TextBox", {
 		Name = "Search",
 		BackgroundColor3 = tokens.SurfaceSecondary,
@@ -2237,11 +2761,11 @@ function Window.new(library, config: WindowConfig)
 	})
 	self.Body = body
 
-	-- Sidebar
+	local sidebarW = self.CompactTab and 56 or SIDEBAR_WIDTH
 	local sidebar = Utility.Create("Frame", {
 		Name = "Sidebar",
 		BackgroundColor3 = tokens.Surface,
-		Size = UDim2.new(0, SIDEBAR_WIDTH, 1, 0),
+		Size = UDim2.new(0, sidebarW, 1, 0),
 		Parent = body,
 	})
 	RegisterTheme(sidebar, "BackgroundColor3", "Surface")
@@ -2272,12 +2796,11 @@ function Window.new(library, config: WindowConfig)
 	})
 	self.SidebarList = sideList
 
-	-- Content area
 	local contentContainer = Utility.Create("Frame", {
 		Name = "ContentContainer",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -SIDEBAR_WIDTH, 1, 0),
-		Position = UDim2.fromOffset(SIDEBAR_WIDTH, 0),
+		Size = UDim2.new(1, -sidebarW, 1, 0),
+		Position = UDim2.fromOffset(sidebarW, 0),
 		Parent = body,
 	})
 	self.ContentContainer = contentContainer
@@ -2367,17 +2890,11 @@ function Window.new(library, config: WindowConfig)
 		end
 	end))
 
-	-- Mobile adaptation
 	if Utility.IsMobile() then
 		root.Size = UDim2.fromScale(0.96, 0.9)
 		sidebar.Size = UDim2.new(0, 64, 1, 0)
 		contentContainer.Size = UDim2.new(1, -64, 1, 0)
 		contentContainer.Position = UDim2.fromOffset(64, 0)
-		for _, child in ipairs(sideList:GetChildren()) do
-			if child:IsA("TextButton") then
-				-- compact
-			end
-		end
 	end
 
 	table.insert(Library.Windows, self)
@@ -2396,6 +2913,10 @@ end
 function Window:SelectTab(tab)
 	for _, t in ipairs(self.Tabs) do
 		t:SetActive(t == tab)
+	end
+	self.CurrentTab = tab
+	if self.ShowTabName and self.TabNameLabel then
+		self.TabNameLabel.Text = tab and tab.Name or ""
 	end
 end
 
@@ -2418,6 +2939,42 @@ function Window:SetSearchEnabled(enabled: boolean)
 	self.SearchBox.Visible = enabled
 end
 
+function Window:SetShowTabName(enabled: boolean)
+	self.ShowTabName = enabled
+	if self.TabNameLabel then
+		self.TabNameLabel.Visible = enabled
+		if enabled and self.CurrentTab then
+			self.TabNameLabel.Text = self.CurrentTab.Name
+		end
+	end
+end
+
+function Window:SetCompactTab(enabled: boolean)
+	self.CompactTab = enabled == true
+	local w = self.CompactTab and 56 or SIDEBAR_WIDTH
+	if self.Sidebar then
+		self.Sidebar.Size = UDim2.new(0, w, 1, 0)
+	end
+	if self.ContentContainer then
+		self.ContentContainer.Size = UDim2.new(1, -w, 1, 0)
+		self.ContentContainer.Position = UDim2.fromOffset(w, 0)
+	end
+	for _, tab in ipairs(self.Tabs) do
+		if tab.Label then
+			tab.Label.Visible = not self.CompactTab
+		end
+		if tab.IconLabel then
+			if self.CompactTab then
+				tab.IconLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+				tab.IconLabel.Position = UDim2.fromScale(0.5, 0.5)
+			else
+				tab.IconLabel.AnchorPoint = Vector2.new(0, 0)
+				tab.IconLabel.Position = UDim2.fromOffset(12, 10)
+			end
+		end
+	end
+end
+
 function Window:Minimize()
 	self.Minimized = true
 	self.Root.Visible = false
@@ -2429,15 +2986,7 @@ function Window:Restore()
 end
 
 function Window:Toggle()
-	if self.Minimized then
-		self:Restore()
-	else
-		self:Minimize()
-	end
-end
-
-function Window:SetResizable(v: boolean)
-	-- handle already created; could toggle visibility of handle
+	if self.Minimized then self:Restore() else self:Minimize() end
 end
 
 function Window:Confirm(config)
@@ -2445,7 +2994,6 @@ function Window:Confirm(config)
 end
 
 function Window:_ApplyTheme(tokens)
-	-- Theme registry handles most; force refresh of dynamic parts if needed
 end
 
 function Window:_ApplyFlag(flag, value)
@@ -2475,10 +3023,9 @@ function Window:Destroy()
 end
 
 ----------------------------------------------------------------
--- Public Library API
+-- Public API
 ----------------------------------------------------------------
 function Library:CreateWindow(config: WindowConfig)
-	-- Ensure notification holder exists
 	if not Library._NotificationHolder then
 		local holder = Utility.Create("Frame", {
 			Name = "NotificationHolder",
@@ -2489,11 +3036,9 @@ function Library:CreateWindow(config: WindowConfig)
 		pcall(protectgui, holder)
 		Library._NotificationHolder = holder
 	end
-
 	if config and config.Theme then
 		Library:SetTheme(config.Theme)
 	end
-
 	return Window.new(self, config or {})
 end
 
@@ -2518,12 +3063,17 @@ function Library:Unload()
 		Library._NotificationHolder:Destroy()
 		Library._NotificationHolder = nil
 	end
+	if TooltipGui then
+		TooltipGui:Destroy()
+		TooltipGui = nil
+		TooltipFrame = nil
+		TooltipLabel = nil
+	end
 	table.clear(Library.Flags)
 	table.clear(ThemeRegistry)
 	table.clear(ActiveTweens)
 end
 
--- Convenience aliases
 Library.Create = Library.CreateWindow
 
 return Library
