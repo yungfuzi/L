@@ -141,7 +141,9 @@ local Library do
 		NotifHolder = nil,
 		UnusedHolder = nil,
 		Font = nil,
-		KeyList = nil
+		KeyList = nil,
+
+		UnloadCallbacks = { }
 	}
 
 	Library.__index = Library
@@ -832,7 +834,17 @@ local Library do
 		PaddingLeft = UDimNew(0, 12)
 	})
 
+	Library.OnUnload = function(self, Callback)
+		if type(Callback) == "function" then
+			TableInsert(self.UnloadCallbacks, Callback)
+		end
+	end
+
 	Library.Unload = function(self)
+		for Index, Value in self.UnloadCallbacks do
+			Library:SafeCall(Value)
+		end
+
 		for Index, Value in self.Connections do 
 			Value.Connection:Disconnect()
 		end
@@ -1599,10 +1611,32 @@ local Library do
 				})
 			end
 
-			function Button:Add(Text, Callback, Disabled)
+			function Button:Add(NameOrProps, Callback, Disabled, Tooltip, Color)
+				local Props = { }
+
+				if type(NameOrProps) == "table" then
+					Props = NameOrProps
+				else
+					Props.Name = NameOrProps
+					Props.Callback = Callback
+					Props.Disabled = Disabled
+					Props.Tooltip = Tooltip
+					Props.Color = Color
+				end
+
+				local Text = Props.Name or Props.Text or Props.name or Props.text or "Button"
+				local CallbackFn = Props.Callback or Props.callback or function() end
+				local IsDisabled = Props.Disabled or Props.disabled or false
+				local TooltipText = Props.Tooltip or Props.tooltip
+				local ButtonColor = Props.Color or Props.color
+				local UseCustomColor = ButtonColor ~= nil
+
 				local NewButton = {
 					Disabled = false,
-					OnPressed = nil
+					OnPressed = nil,
+					Callback = CallbackFn,
+					Color = ButtonColor,
+					Text = Text
 				}
 
 				local SubItems = { } do
@@ -1618,8 +1652,12 @@ local Library do
 						Size = UDim2New(0, 200, 0, 50),
 						ZIndex = 2,
 						TextSize = 14,
-						BackgroundColor3 = FromRGB(36, 32, 39)
-					})  SubItems["NewButton"]:AddToTheme({BackgroundColor3 = "Element"})
+						BackgroundColor3 = UseCustomColor and ButtonColor or FromRGB(36, 32, 39)
+					})
+
+					if not UseCustomColor then
+						SubItems["NewButton"]:AddToTheme({BackgroundColor3 = "Element"})
+					end
 
 					Instances:Create("UICorner", {
 						Parent = SubItems["NewButton"].Instance,
@@ -1653,45 +1691,76 @@ local Library do
 				end
 
 				function NewButton:Press()
-					if self.Disabled then 
-						return 
+					if self.Disabled then
+						return
 					end
 
-					SubItems["NewButton"]:ChangeItemTheme({BackgroundColor3 = "Accent"})
-					SubItems["NewButton"]:Tween(nil, {BackgroundColor3 = Library.Theme.Accent})
+					local PressColor = self.Color or Library.Theme.Accent
+					local RestColor = self.Color or Library.Theme.Element
+
+					if not self.Color then
+						SubItems["NewButton"]:ChangeItemTheme({BackgroundColor3 = "Accent"})
+					end
+					SubItems["NewButton"]:Tween(nil, {BackgroundColor3 = PressColor})
 					task.wait(0.1)
-					SubItems["NewButton"]:ChangeItemTheme({BackgroundColor3 = "Element"})
-					SubItems["NewButton"]:Tween(nil, {BackgroundColor3 = Library.Theme.Element})
 
-					if Callback then 
-						Library:SafeCall(Callback)
+					if not self.Color then
+						SubItems["NewButton"]:ChangeItemTheme({BackgroundColor3 = "Element"})
+					end
+					SubItems["NewButton"]:Tween(nil, {BackgroundColor3 = RestColor})
+
+					if self.Callback then
+						Library:SafeCall(self.Callback)
 					end
 
-					if self.OnPressed then 
+					if self.OnPressed then
 						self.OnPressed()
 					end
 				end
 
-				function NewButton:SetText(Text)
-					Text = tostring(Text)
+				function NewButton:SetText(NewText)
+					NewText = tostring(NewText)
+					self.Text = NewText
+					SubItems["Text"].Instance.Text = NewText
+				end
 
-					SubItems["Text"].Instance.Text = Text
+				function NewButton:GetText()
+					return self.Text
 				end
 
 				function NewButton:SetVisible(Bool)
-					SubItems["NewButton"].Instance.Visible = Bool
+					SubItems["NewButton"].Instance.Visible = not not Bool
 				end
 
 				function NewButton:SetDisabled(Bool)
-					self.Disabled = Bool
+					self.Disabled = not not Bool
 
-					if self.Disabled then 
+					if self.Disabled then
 						SubItems["NewButton"]:Tween(nil, {BackgroundTransparency = 0.6})
 						SubItems["Text"]:Tween(nil, {TextTransparency = 0.6})
 					else
 						SubItems["NewButton"]:Tween(nil, {BackgroundTransparency = 0})
 						SubItems["Text"]:Tween(nil, {TextTransparency = 0})
 					end
+				end
+
+				function NewButton:SetColor(NewColor)
+					self.Color = NewColor
+					if NewColor then
+						SubItems["NewButton"]:ChangeItemTheme({})
+						SubItems["NewButton"]:Tween(nil, {BackgroundColor3 = NewColor})
+					else
+						SubItems["NewButton"]:AddToTheme({BackgroundColor3 = "Element"})
+						SubItems["NewButton"]:Tween(nil, {BackgroundColor3 = Library.Theme.Element})
+					end
+				end
+
+				function NewButton:SetCallback(NewCallback)
+					self.Callback = NewCallback or function() end
+				end
+
+				function NewButton:GetDisabled()
+					return self.Disabled
 				end
 
 				local SearchData = {
@@ -1701,28 +1770,30 @@ local Library do
 
 				local PageSearchData = Library.SearchItems[Data.Page]
 
-				if not PageSearchData then 
-					return 
+				if PageSearchData then
+					TableInsert(PageSearchData, SearchData)
 				end
-
-				TableInsert(PageSearchData, SearchData)
 
 				SubItems["NewButton"]:Connect("MouseButton1Down", function()
 					NewButton:Press()
 				end)
 
-				if Disabled then 
-					NewButton:SetDisabled(Disabled)
+				if IsDisabled then
+					NewButton:SetDisabled(true)
 				end
 
-				return NewButton, SubItems 
+				if TooltipText then
+					SubItems["NewButton"]:Tooltip(TooltipText)
+				end
+
+				return NewButton, SubItems
 			end
 
 			function Button:SetVisible(Bool)
-				Items["Button"].Instance.Visible = Bool
+				Items["Button"].Instance.Visible = not not Bool
 			end
 
-			return Button, Items 
+			return Button, Items
 		end
 
 		Components.Slider = function(Data)
@@ -2508,6 +2579,585 @@ local Library do
 			end
 
 			return Dropdown, Items 
+		end
+
+		Components.SearchBox = function(Data)
+			local SearchBox = {
+				Value = Data.Multi and { } or nil,
+				Flag = Data.Flag,
+				IsOpen = false,
+				Disabled = false,
+				OnChanged = nil,
+				Options = { },
+				Filter = ""
+			}
+
+			local Items = { } do
+				Items["SearchBox"] = Instances:Create("Frame", {
+					Parent = Data.Parent.Instance,
+					Name = "\0",
+					BackgroundTransparency = 1,
+					Size = UDim2New(1, 0, 0, 25),
+					BorderColor3 = FromRGB(0, 0, 0),
+					ZIndex = 2,
+					BorderSizePixel = 0,
+					BackgroundColor3 = FromRGB(255, 255, 255)
+				})
+
+				Items["Text"] = Instances:Create("TextLabel", {
+					Parent = Items["SearchBox"].Instance,
+					Name = "\0",
+					FontFace = Library.Font,
+					TextColor3 = FromRGB(255, 255, 255),
+					BorderColor3 = FromRGB(0, 0, 0),
+					Text = Data.Name,
+					AutomaticSize = Enum.AutomaticSize.X,
+					AnchorPoint = Vector2New(0, 0.5),
+					Size = UDim2New(0, 0, 0, 15),
+					BackgroundTransparency = 1,
+					Position = UDim2New(0, 0, 0.5, 0),
+					BorderSizePixel = 0,
+					ZIndex = 2,
+					TextSize = 14,
+					BackgroundColor3 = FromRGB(255, 255, 255)
+				})  Items["Text"]:AddToTheme({TextColor3 = "Text"})
+
+				Items["RealSearchBox"] = Instances:Create("TextButton", {
+					Parent = Items["SearchBox"].Instance,
+					Text = "",
+					AutoButtonColor = false,
+					Name = "\0",
+					BorderColor3 = FromRGB(0, 0, 0),
+					AnchorPoint = Vector2New(1, 0),
+					Position = UDim2New(1, 0, 0, 0),
+					Size = UDim2New(0, not IsMobile and 135 or 75, 0, 25),
+					ZIndex = 2,
+					BorderSizePixel = 0,
+					BackgroundColor3 = FromRGB(36, 32, 39)
+				})  Items["RealSearchBox"]:AddToTheme({BackgroundColor3 = "Element"})
+
+				Instances:Create("UICorner", {
+					Parent = Items["RealSearchBox"].Instance,
+					Name = "\0",
+					CornerRadius = UDimNew(0, 5)
+				})
+
+				Instances:Create("UIGradient", {
+					Parent = Items["RealSearchBox"].Instance,
+					Name = "\0",
+					Rotation = 90,
+					Color = RGBSequence{RGBSequenceKeypoint(0, FromRGB(255, 255, 255)), RGBSequenceKeypoint(1, FromRGB(216, 216, 216))}
+				}):AddToTheme({Color = function()
+					return RGBSequence{RGBSequenceKeypoint(0, FromRGB(255, 255, 255)), RGBSequenceKeypoint(1, Library.Theme["Gradient"])}
+				end})
+
+				Items["Value"] = Instances:Create("TextLabel", {
+					Parent = Items["RealSearchBox"].Instance,
+					Name = "\0",
+					FontFace = Library.Font,
+					TextColor3 = FromRGB(255, 255, 255),
+					BorderColor3 = FromRGB(0, 0, 0),
+					Text = "--",
+					TextTruncate = Enum.TextTruncate.AtEnd,
+					Size = UDim2New(1, -25, 0, 15),
+					AnchorPoint = Vector2New(0, 0.5),
+					Position = UDim2New(0, 8, 0.5, 0),
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					BorderSizePixel = 0,
+					ZIndex = 2,
+					TextSize = 14,
+					BackgroundColor3 = FromRGB(255, 255, 255)
+				})  Items["Value"]:AddToTheme({TextColor3 = "Text"})
+
+				Items["Icon"] = Instances:Create("ImageLabel", {
+					Parent = Items["RealSearchBox"].Instance,
+					Name = "\0",
+					ImageColor3 = FromRGB(232, 186, 248),
+					ScaleType = Enum.ScaleType.Fit,
+					BorderColor3 = FromRGB(0, 0, 0),
+					Size = UDim2New(0, 25, 0, 25),
+					AnchorPoint = Vector2New(1, 0.5),
+					Image = "rbxassetid://96215562143920",
+					BackgroundTransparency = 1,
+					Position = UDim2New(1, -1, 0.5, 0),
+					ZIndex = 2,
+					BorderSizePixel = 0,
+					BackgroundColor3 = FromRGB(255, 255, 255)
+				})  Items["Icon"]:AddToTheme({ImageColor3 = "Accent"})
+
+				-- Popup panel (search + list)
+				Items["Panel"] = Instances:Create("Frame", {
+					Parent = Library.Holder.Instance,
+					Name = "\0",
+					Visible = false,
+					BorderSizePixel = 0,
+					ZIndex = 12,
+					Size = UDim2New(0, 160, 0, 180),
+					Position = UDim2New(0, 0, 0, 0),
+					BackgroundColor3 = FromRGB(15, 12, 16)
+				})  Items["Panel"]:AddToTheme({BackgroundColor3 = "Background"})
+
+				Instances:Create("UICorner", {
+					Parent = Items["Panel"].Instance,
+					Name = "\0",
+					CornerRadius = UDimNew(0, 5)
+				})
+
+				Instances:Create("UIPadding", {
+					Parent = Items["Panel"].Instance,
+					Name = "\0",
+					PaddingTop = UDimNew(0, 6),
+					PaddingBottom = UDimNew(0, 6),
+					PaddingLeft = UDimNew(0, 6),
+					PaddingRight = UDimNew(0, 6)
+				})
+
+				Instances:Create("UIListLayout", {
+					Parent = Items["Panel"].Instance,
+					Name = "\0",
+					Padding = UDimNew(0, 6),
+					SortOrder = Enum.SortOrder.LayoutOrder
+				})
+
+				Items["Search"] = Instances:Create("TextBox", {
+					Parent = Items["Panel"].Instance,
+					Name = "\0",
+					FontFace = Library.Font,
+					Text = "",
+					PlaceholderText = "Search...",
+					TextColor3 = FromRGB(255, 255, 255),
+					PlaceholderColor3 = FromRGB(185, 185, 185),
+					TextSize = 13,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					ClearTextOnFocus = false,
+					BorderSizePixel = 0,
+					Size = UDim2New(1, 0, 0, 26),
+					LayoutOrder = 1,
+					ZIndex = 13,
+					BackgroundColor3 = FromRGB(36, 32, 39)
+				})  Items["Search"]:AddToTheme({BackgroundColor3 = "Element", TextColor3 = "Text", PlaceholderColor3 = "Inactive Text"})
+
+				Instances:Create("UICorner", {
+					Parent = Items["Search"].Instance,
+					Name = "\0",
+					CornerRadius = UDimNew(0, 4)
+				})
+
+				Instances:Create("UIPadding", {
+					Parent = Items["Search"].Instance,
+					Name = "\0",
+					PaddingLeft = UDimNew(0, 8),
+					PaddingRight = UDimNew(0, 8)
+				})
+
+				Items["OptionHolder"] = Instances:Create("ScrollingFrame", {
+					Parent = Items["Panel"].Instance,
+					Name = "\0",
+					Active = true,
+					AutomaticCanvasSize = Enum.AutomaticSize.Y,
+					BorderSizePixel = 0,
+					CanvasSize = UDim2New(0, 0, 0, 0),
+					ScrollBarImageColor3 = FromRGB(232, 186, 248),
+					ScrollBarThickness = 1,
+					MidImage = "rbxassetid://128693616966482",
+					TopImage = "rbxassetid://128693616966482",
+					BottomImage = "rbxassetid://128693616966482",
+					Size = UDim2New(1, 0, 1, -32),
+					LayoutOrder = 2,
+					ZIndex = 13,
+					BackgroundTransparency = 1,
+					BackgroundColor3 = FromRGB(15, 12, 16)
+				})  Items["OptionHolder"]:AddToTheme({ScrollBarImageColor3 = "Accent"})
+
+				Instances:Create("UIListLayout", {
+					Parent = Items["OptionHolder"].Instance,
+					Name = "\0",
+					Padding = UDimNew(0, 4),
+					SortOrder = Enum.SortOrder.LayoutOrder
+				})
+			end
+
+			local function UpdateDisplay()
+				if Data.Multi then
+					local List = SearchBox.Value or { }
+					Items["Value"].Instance.Text = #List == 0 and "--" or TableConcat(List, ", ")
+				else
+					Items["Value"].Instance.Text = SearchBox.Value or "--"
+				end
+			end
+
+			local function ApplyFilter()
+				local Filter = StringLower(SearchBox.Filter or "")
+				for Name, OptionData in pairs(SearchBox.Options) do
+					if Filter == "" or StringFind(StringLower(Name), Filter, 1, true) then
+						OptionData.Button.Instance.Visible = true
+					else
+						OptionData.Button.Instance.Visible = false
+					end
+				end
+			end
+
+			function SearchBox:Set(Option)
+				if self.Disabled then
+					return
+				end
+
+				if Data.Multi then
+					if type(Option) ~= "table" then
+						return
+					end
+
+					for _, Opt in pairs(self.Options) do
+						Opt.Selected = false
+						Opt:Toggle("Inactive")
+					end
+
+					self.Value = { }
+					for _, Name in ipairs(Option) do
+						local OptionData = self.Options[Name]
+						if OptionData then
+							OptionData.Selected = true
+							OptionData:Toggle("Active")
+							TableInsert(self.Value, Name)
+						end
+					end
+
+					Library.Flags[self.Flag] = self.Value
+				else
+					local OptionData = self.Options[Option]
+					if not OptionData then
+						return
+					end
+
+					for _, Opt in pairs(self.Options) do
+						if Opt ~= OptionData then
+							Opt.Selected = false
+							Opt:Toggle("Inactive")
+						else
+							Opt.Selected = true
+							Opt:Toggle("Active")
+						end
+					end
+
+					self.Value = OptionData.Name
+					Library.Flags[self.Flag] = OptionData.Name
+				end
+
+				UpdateDisplay()
+
+				if Data.Callback then
+					Library:SafeCall(Data.Callback, self.Value)
+				end
+
+				if self.OnChanged then
+					self.OnChanged(self.Value)
+				end
+			end
+
+			function SearchBox:Get()
+				return self.Value
+			end
+
+			function SearchBox:Add(Option)
+				if self.Options[Option] then
+					return
+				end
+
+				local OptionData = {
+					Name = Option,
+					Selected = false
+				}
+
+				local OptionButton = Instances:Create("TextButton", {
+					Parent = Items["OptionHolder"].Instance,
+					Name = "\0",
+					FontFace = Library.Font,
+					Text = "",
+					AutoButtonColor = false,
+					BorderSizePixel = 0,
+					Size = UDim2New(1, 0, 0, 24),
+					ZIndex = 14,
+					BackgroundTransparency = 1,
+					BackgroundColor3 = FromRGB(22, 20, 24)
+				})  OptionButton:AddToTheme({BackgroundColor3 = "Inline"})
+
+				Instances:Create("UICorner", {
+					Parent = OptionButton.Instance,
+					Name = "\0",
+					CornerRadius = UDimNew(0, 4)
+				})
+
+				local OptionText = Instances:Create("TextLabel", {
+					Parent = OptionButton.Instance,
+					Name = "\0",
+					FontFace = Library.Font,
+					Text = tostring(Option),
+					TextColor3 = FromRGB(255, 255, 255),
+					TextTransparency = 0.35,
+					TextSize = 13,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Size = UDim2New(1, -10, 1, 0),
+					Position = UDim2New(0, 8, 0, 0),
+					ZIndex = 15,
+					BackgroundColor3 = FromRGB(255, 255, 255)
+				})  OptionText:AddToTheme({TextColor3 = "Text"})
+
+				function OptionData:Toggle(State)
+					if State == "Active" then
+						OptionButton:Tween(nil, {BackgroundTransparency = 0})
+						OptionText:Tween(nil, {TextTransparency = 0})
+					else
+						OptionButton:Tween(nil, {BackgroundTransparency = 1})
+						OptionText:Tween(nil, {TextTransparency = 0.35})
+					end
+				end
+
+				OptionButton:Connect("MouseButton1Down", function()
+					if SearchBox.Disabled then
+						return
+					end
+
+					if Data.Multi then
+						if OptionData.Selected then
+							OptionData.Selected = false
+							OptionData:Toggle("Inactive")
+							local NewValue = { }
+							for _, V in ipairs(SearchBox.Value or { }) do
+								if V ~= OptionData.Name then
+									TableInsert(NewValue, V)
+								end
+							end
+							SearchBox.Value = NewValue
+						else
+							OptionData.Selected = true
+							OptionData:Toggle("Active")
+							SearchBox.Value = SearchBox.Value or { }
+							TableInsert(SearchBox.Value, OptionData.Name)
+						end
+
+						Library.Flags[SearchBox.Flag] = SearchBox.Value
+						UpdateDisplay()
+
+						if Data.Callback then
+							Library:SafeCall(Data.Callback, SearchBox.Value)
+						end
+						if SearchBox.OnChanged then
+							SearchBox.OnChanged(SearchBox.Value)
+						end
+					else
+						SearchBox:Set(OptionData.Name)
+						SearchBox:SetOpen(false)
+					end
+				end)
+
+				OptionData.Button = OptionButton
+				OptionData.Text = OptionText
+				self.Options[Option] = OptionData
+
+				ApplyFilter()
+			end
+
+			function SearchBox:Remove(Option)
+				local OptionData = self.Options[Option]
+				if not OptionData then
+					return
+				end
+
+				OptionData.Button:Clean()
+				self.Options[Option] = nil
+
+				if Data.Multi and type(self.Value) == "table" then
+					local NewValue = { }
+					for _, V in ipairs(self.Value) do
+						if V ~= Option then
+							TableInsert(NewValue, V)
+						end
+					end
+					self.Value = NewValue
+					Library.Flags[self.Flag] = self.Value
+				elseif self.Value == Option then
+					self.Value = nil
+					Library.Flags[self.Flag] = nil
+				end
+
+				UpdateDisplay()
+			end
+
+			function SearchBox:Clear()
+				for Name in pairs(self.Options) do
+					self:Remove(Name)
+				end
+			end
+
+			function SearchBox:Refresh(List)
+				self:Clear()
+				for _, Value in ipairs(List or { }) do
+					self:Add(Value)
+				end
+			end
+
+			function SearchBox:SetMulti(Bool)
+				Data.Multi = not not Bool
+				if Data.Multi then
+					self.Value = type(self.Value) == "table" and self.Value or { }
+				else
+					self.Value = type(self.Value) == "table" and self.Value[1] or self.Value
+				end
+				UpdateDisplay()
+			end
+
+			function SearchBox:SetText(Text)
+				Items["Text"].Instance.Text = tostring(Text)
+			end
+
+			function SearchBox:SetDisabled(Bool)
+				self.Disabled = not not Bool
+				if self.Disabled then
+					Items["RealSearchBox"]:Tween(nil, {BackgroundTransparency = 0.6})
+					Items["Value"]:Tween(nil, {TextTransparency = 0.6})
+					self:SetOpen(false)
+				else
+					Items["RealSearchBox"]:Tween(nil, {BackgroundTransparency = 0})
+					Items["Value"]:Tween(nil, {TextTransparency = 0})
+				end
+			end
+
+			function SearchBox:SetVisible(Bool)
+				Items["SearchBox"].Instance.Visible = not not Bool
+			end
+
+			local Debounce = false
+			local RenderStepped
+
+			function SearchBox:SetOpen(Bool)
+				if not self or not Items or not Items["Panel"] or not Items["Panel"].Instance then
+					self.IsOpen = false
+					return
+				end
+				if Debounce then return end
+
+				self.IsOpen = not not Bool
+				Debounce = true
+
+				local panel = Items["Panel"].Instance
+				local icon = Items["Icon"]
+				local btn = Items["RealSearchBox"] and Items["RealSearchBox"].Instance
+
+				if self.IsOpen then
+					panel.Visible = true
+					if icon and icon.Tween then icon:Tween(nil, {Rotation = -90}) end
+
+					Items["Search"].Instance.Text = ""
+					SearchBox.Filter = ""
+					ApplyFilter()
+
+					RenderStepped = RunService.RenderStepped:Connect(function()
+						if panel and panel.Parent and btn then
+							local Width = MathMax(btn.AbsoluteSize.X, 160)
+							panel.Size = UDim2New(0, Width, 0, 180)
+							panel.Position = UDim2New(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + 30)
+						end
+					end)
+
+					for _, v in pairs(Library.OpenFrames) do
+						if v ~= self and type(v.SetOpen) == "function" then
+							pcall(v.SetOpen, v, false)
+						end
+					end
+					Library.OpenFrames[self] = self
+				else
+					if icon and icon.Tween then icon:Tween(nil, {Rotation = 0}) end
+					if Library.OpenFrames[self] then Library.OpenFrames[self] = nil end
+					if RenderStepped then RenderStepped:Disconnect(); RenderStepped = nil end
+				end
+
+				local Descendants = panel:GetDescendants()
+				TableInsert(Descendants, panel)
+
+				local NewTween
+				for _, Object in ipairs(Descendants) do
+					local TransparencyProperty = Tween:GetProperty(Object)
+					if TransparencyProperty and not StringFind(Object.ClassName, "UI") then
+						Object.ZIndex = self.IsOpen and 1000 or 0
+						if type(TransparencyProperty) == "table" then
+							for _, Property in ipairs(TransparencyProperty) do
+								NewTween = Tween:FadeItem(Object, Property, self.IsOpen, Data.Window and Data.Window.FadeSpeed)
+							end
+						else
+							NewTween = Tween:FadeItem(Object, TransparencyProperty, self.IsOpen, Data.Window and Data.Window.FadeSpeed)
+						end
+					end
+				end
+
+				if NewTween and NewTween.Tween then
+					Library:Connect(NewTween.Tween.Completed, function()
+						Debounce = false
+						if panel and panel.Parent then
+							panel.Visible = self.IsOpen
+						end
+					end)
+				else
+					Debounce = false
+					if panel and panel.Parent then
+						panel.Visible = self.IsOpen
+					end
+				end
+			end
+
+			Items["Search"]:Connect("Changed", function(Prop)
+				if Prop == "Text" then
+					SearchBox.Filter = Items["Search"].Instance.Text
+					ApplyFilter()
+				end
+			end)
+
+			Items["RealSearchBox"]:Connect("MouseButton1Down", function()
+				if SearchBox.Disabled then
+					return
+				end
+				SearchBox:SetOpen(not SearchBox.IsOpen)
+			end)
+
+			Library:Connect(UserInputService.InputBegan, function(Input)
+				if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+					if SearchBox.IsOpen and not Library:IsMouseOverFrame(Items["Panel"]) and not Library:IsMouseOverFrame(Items["RealSearchBox"]) then
+						SearchBox:SetOpen(false)
+					end
+				end
+			end)
+
+			local SearchData = {
+				Name = Data.Name,
+				Item = Items["SearchBox"]
+			}
+
+			local PageSearchData = Library.SearchItems[Data.Page]
+			if PageSearchData then
+				TableInsert(PageSearchData, SearchData)
+			end
+
+			if Data.Disabled then
+				SearchBox:SetDisabled(true)
+			end
+
+			for _, Value in ipairs(Data.Items or { }) do
+				SearchBox:Add(Value)
+			end
+
+			if Data.Default ~= nil then
+				SearchBox:Set(Data.Default)
+			else
+				UpdateDisplay()
+			end
+
+			Library.SetFlags[SearchBox.Flag] = function(Value)
+				SearchBox:Set(Value)
+			end
+
+			return SearchBox, Items
 		end
 
 		Components.ToggleDropdown = function(Data)
@@ -4403,6 +5053,267 @@ local Library do
 		end
 	end
 
+	Library.Modal = function(self, Properties)
+		Properties = Properties or { }
+
+		local Title = Properties.Title or Properties.title or "Modal"
+		local Content = Properties.Content or Properties.content or ""
+		local Duration = Properties.Duration or Properties.duration
+		local Buttons = Properties.Buttons or Properties.buttons or { }
+		local CanClose = Properties.CanClose
+		if CanClose == nil then
+			CanClose = Properties.canclose
+		end
+		if CanClose == nil then
+			CanClose = true
+		end
+
+		local Modal = {
+			Closed = false,
+			Items = { }
+		}
+
+		local Items = { } do
+			Items["Overlay"] = Instances:Create("TextButton", {
+				Parent = Library.Holder.Instance,
+				Name = "\0",
+				Text = "",
+				AutoButtonColor = false,
+				BackgroundTransparency = 1,
+				BackgroundColor3 = FromRGB(0, 0, 0),
+				BorderSizePixel = 0,
+				Size = UDim2New(1, 0, 1, 0),
+				ZIndex = 200,
+				Active = true
+			})
+
+			Items["Modal"] = Instances:Create("Frame", {
+				Parent = Items["Overlay"].Instance,
+				Name = "\0",
+				AnchorPoint = Vector2New(0.5, 0.5),
+				Position = UDim2New(0.5, 0, 0.5, 0),
+				Size = UDim2New(0, 360, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				ZIndex = 201,
+				BackgroundColor3 = FromRGB(15, 12, 16)
+			})  Items["Modal"]:AddToTheme({BackgroundColor3 = "Background"})
+
+			Instances:Create("UICorner", {
+				Parent = Items["Modal"].Instance,
+				Name = "\0",
+				CornerRadius = UDimNew(0, 8)
+			})
+
+			Instances:Create("UIStroke", {
+				Parent = Items["Modal"].Instance,
+				Name = "\0",
+				Color = FromRGB(41, 37, 45),
+				Transparency = 0.3
+			}):AddToTheme({Color = "Border"})
+
+			Instances:Create("UIPadding", {
+				Parent = Items["Modal"].Instance,
+				Name = "\0",
+				PaddingTop = UDimNew(0, 12),
+				PaddingBottom = UDimNew(0, 12),
+				PaddingLeft = UDimNew(0, 14),
+				PaddingRight = UDimNew(0, 14)
+			})
+
+			Items["TopBar"] = Instances:Create("Frame", {
+				Parent = Items["Modal"].Instance,
+				Name = "\0",
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Size = UDim2New(1, 0, 0, 22),
+				ZIndex = 202,
+				BackgroundColor3 = FromRGB(255, 255, 255)
+			})
+
+			Items["Title"] = Instances:Create("TextLabel", {
+				Parent = Items["TopBar"].Instance,
+				Name = "\0",
+				FontFace = Library.Font,
+				Text = Title,
+				TextColor3 = FromRGB(255, 255, 255),
+				TextSize = 15,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Size = UDim2New(1, CanClose and -28 or 0, 1, 0),
+				ZIndex = 202,
+				BackgroundColor3 = FromRGB(255, 255, 255)
+			})  Items["Title"]:AddToTheme({TextColor3 = "Text"})
+
+			if CanClose then
+				Items["Close"] = Instances:Create("ImageButton", {
+					Parent = Items["TopBar"].Instance,
+					Name = "\0",
+					Image = "rbxassetid://131854485604535",
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Size = UDim2New(0, 16, 0, 16),
+					Position = UDim2New(1, -16, 0.5, -8),
+					ZIndex = 203,
+					ImageColor3 = FromRGB(255, 255, 255),
+					AutoButtonColor = false
+				})  Items["Close"]:AddToTheme({ImageColor3 = "Text"})
+			end
+
+			Items["Content"] = Instances:Create("TextLabel", {
+				Parent = Items["Modal"].Instance,
+				Name = "\0",
+				FontFace = Library.Font,
+				Text = Content,
+				TextColor3 = FromRGB(200, 200, 205),
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				TextWrapped = true,
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Size = UDim2New(1, 0, 0, 0),
+				ZIndex = 202,
+				BackgroundColor3 = FromRGB(255, 255, 255)
+			})  Items["Content"]:AddToTheme({TextColor3 = "Text"})
+
+			Items["Buttons"] = Instances:Create("Frame", {
+				Parent = Items["Modal"].Instance,
+				Name = "\0",
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Size = UDim2New(1, 0, 0, 32),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				ZIndex = 202,
+				BackgroundColor3 = FromRGB(255, 255, 255)
+			})
+
+			Instances:Create("UIListLayout", {
+				Parent = Items["Buttons"].Instance,
+				Name = "\0",
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Right,
+				Padding = UDimNew(0, 8),
+				SortOrder = Enum.SortOrder.LayoutOrder
+			})
+
+			Instances:Create("UIPadding", {
+				Parent = Items["Buttons"].Instance,
+				Name = "\0",
+				PaddingTop = UDimNew(0, 14)
+			})
+
+			-- vertical stack for title / content / buttons
+			Instances:Create("UIListLayout", {
+				Parent = Items["Modal"].Instance,
+				Name = "\0",
+				Padding = UDimNew(0, 0),
+				SortOrder = Enum.SortOrder.LayoutOrder
+			})
+
+			Items["TopBar"].Instance.LayoutOrder = 1
+			Items["Content"].Instance.LayoutOrder = 2
+			Items["Buttons"].Instance.LayoutOrder = 3
+
+			for Index, ButtonData in ipairs(Buttons) do
+				local BtnText = ButtonData[1] or ButtonData.Name or ButtonData.Text or "Button"
+				local BtnColor = ButtonData[2] or ButtonData.Color
+				local BtnCallback = ButtonData[3] or ButtonData.Callback or function() end
+
+				local Btn = Instances:Create("TextButton", {
+					Parent = Items["Buttons"].Instance,
+					Name = "\0",
+					FontFace = Library.Font,
+					Text = "",
+					AutoButtonColor = false,
+					BorderSizePixel = 0,
+					Size = UDim2New(0, 0, 0, 30),
+					AutomaticSize = Enum.AutomaticSize.X,
+					ZIndex = 203,
+					TextSize = 13,
+					BackgroundColor3 = BtnColor or FromRGB(36, 32, 39)
+				})
+
+				if not BtnColor then
+					Btn:AddToTheme({BackgroundColor3 = "Element"})
+				end
+
+				Instances:Create("UICorner", {
+					Parent = Btn.Instance,
+					Name = "\0",
+					CornerRadius = UDimNew(0, 5)
+				})
+
+				Instances:Create("UIPadding", {
+					Parent = Btn.Instance,
+					Name = "\0",
+					PaddingLeft = UDimNew(0, 14),
+					PaddingRight = UDimNew(0, 14)
+				})
+
+				local BtnLabel = Instances:Create("TextLabel", {
+					Parent = Btn.Instance,
+					Name = "\0",
+					FontFace = Library.Font,
+					Text = tostring(BtnText),
+					TextColor3 = FromRGB(255, 255, 255),
+					TextSize = 13,
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Size = UDim2New(1, 0, 1, 0),
+					ZIndex = 204,
+					BackgroundColor3 = FromRGB(255, 255, 255)
+				})  BtnLabel:AddToTheme({TextColor3 = "Text"})
+
+				Btn:Connect("MouseButton1Down", function()
+					Library:SafeCall(BtnCallback)
+					Modal:Close()
+				end)
+			end
+
+			Modal.Items = Items
+		end
+
+		function Modal:Close()
+			if self.Closed then
+				return
+			end
+			self.Closed = true
+
+			Items["Overlay"]:Tween(nil, {BackgroundTransparency = 1})
+			Items["Modal"]:Tween(nil, {BackgroundTransparency = 1})
+
+			task.delay(0.2, function()
+				if Items["Overlay"] then
+					Items["Overlay"]:Clean()
+				end
+			end)
+		end
+
+		-- fade in
+		Items["Overlay"]:Tween(nil, {BackgroundTransparency = 0.45})
+		Items["Modal"]:Tween(nil, {BackgroundTransparency = 0.05})
+
+		if CanClose and Items["Close"] then
+			Items["Close"]:Connect("MouseButton1Down", function()
+				Modal:Close()
+			end)
+		end
+
+		if Duration and type(Duration) == "number" and Duration > 0 then
+			task.delay(Duration, function()
+				if not Modal.Closed then
+					Modal:Close()
+				end
+			end)
+		end
+
+		return Modal
+	end
+
 	Library.Notification = function(self, Text, Description, Duration)
 		Duration = math.max(Duration or 1, 0.1)
 
@@ -5080,15 +5991,187 @@ local Library do
 		end)
 
 		Items["CloseButton"]:Connect("MouseButton1Down", function()
-			Items["MainFrame"].Instance.Visible = false
-			task.wait(0.1)
-			Library:Unload()
+			Library:Modal({
+				Title = "Close UI?",
+				Content = "Are you sure you want to close and unload the library?",
+				CanClose = true,
+				Buttons = {
+					{"Yes", Color3.fromRGB(232, 100, 100), function()
+						Items["MainFrame"].Instance.Visible = false
+						task.wait(0.1)
+						Library:Unload()
+					end},
+					{"No", nil, function() end}
+				}
+			})
 		end)
 
 		return setmetatable(Window, self)
 	end
 
 
+
+	Library.PageSection = function(self, Properties)
+		Properties = Properties or { }
+
+		local PageSection = {
+			Window = self,
+
+			Name = Properties.Name or Properties.name or "Section",
+			Collapsible = Properties.Collapsible ~= false and Properties.collapsible ~= false,
+			Open = Properties.Default ~= false and Properties.default ~= false,
+
+			Items = { },
+			Pages = { }
+		}
+
+		local Items = { } do
+			Items["PageSection"] = Instances:Create("Frame", {
+				Parent = PageSection.Window.Items["Pages"].Instance,
+				Name = "\0",
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Size = UDim2New(1, 0, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				ZIndex = 2,
+				BackgroundColor3 = FromRGB(255, 255, 255)
+			})
+
+			Items["Header"] = Instances:Create("TextButton", {
+				Parent = Items["PageSection"].Instance,
+				Name = "\0",
+				FontFace = Library.Font,
+				Text = "",
+				AutoButtonColor = false,
+				BorderSizePixel = 0,
+				BackgroundTransparency = 1,
+				Size = UDim2New(1, 0, 0, 22),
+				ZIndex = 2,
+				TextSize = 12,
+				BackgroundColor3 = FromRGB(22, 20, 24)
+			})
+
+			Items["Text"] = Instances:Create("TextLabel", {
+				Parent = Items["Header"].Instance,
+				Name = "\0",
+				FontFace = Library.Font,
+				TextColor3 = FromRGB(255, 255, 255),
+				TextTransparency = 0.25,
+				Text = PageSection.Name,
+				AutomaticSize = Enum.AutomaticSize.X,
+				Size = UDim2New(0, 0, 1, 0),
+				BackgroundTransparency = 1,
+				Position = UDim2New(0, 4, 0, 0),
+				BorderSizePixel = 0,
+				ZIndex = 2,
+				TextSize = 12,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				BackgroundColor3 = FromRGB(255, 255, 255)
+			})  Items["Text"]:AddToTheme({TextColor3 = "Text"})
+
+			if PageSection.Collapsible then
+				Items["Collapse"] = Instances:Create("ImageButton", {
+					Parent = Items["Header"].Instance,
+					Name = "\0",
+					Image = "rbxassetid://134878256295114",
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Size = UDim2New(0, 12, 0, 12),
+					Position = UDim2New(1, -14, 0.5, -6),
+					ZIndex = 3,
+					ImageColor3 = FromRGB(255, 255, 255),
+					ImageTransparency = 0.25,
+					Rotation = PageSection.Open and 0 or -90
+				})  Items["Collapse"]:AddToTheme({ImageColor3 = "Text"})
+			end
+
+			Items["Content"] = Instances:Create("Frame", {
+				Parent = Items["PageSection"].Instance,
+				Name = "\0",
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				Size = UDim2New(1, 0, 0, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Visible = PageSection.Open,
+				ZIndex = 2,
+				BackgroundColor3 = FromRGB(255, 255, 255)
+			})
+
+			Instances:Create("UIListLayout", {
+				Parent = Items["Content"].Instance,
+				Name = "\0",
+				Padding = UDimNew(0, 6),
+				SortOrder = Enum.SortOrder.LayoutOrder
+			})
+
+			Instances:Create("UIPadding", {
+				Parent = Items["Content"].Instance,
+				Name = "\0",
+				PaddingLeft = UDimNew(0, 6)
+			})
+
+			PageSection.Items = Items
+		end
+
+		function PageSection:GetState()
+			return self.Open
+		end
+
+		function PageSection:SetCollapsed(Bool)
+			Bool = not not Bool
+			self.Open = not Bool
+
+			Items["Content"].Instance.Visible = self.Open
+
+			if Items["Collapse"] then
+				Items["Collapse"]:Tween(nil, {Rotation = self.Open and 0 or -90})
+			end
+		end
+
+		function PageSection:SetOpen(Bool)
+			self:SetCollapsed(not Bool)
+		end
+
+		function PageSection:Toggle()
+			self:SetCollapsed(self.Open)
+		end
+
+		function PageSection:SetVisible(Bool)
+			Items["PageSection"].Instance.Visible = not not Bool
+		end
+
+		function PageSection:SetName(Name)
+			Name = tostring(Name or "")
+			self.Name = Name
+			Items["Text"].Instance.Text = Name
+		end
+
+		function PageSection:Page(PageProperties)
+			PageProperties = PageProperties or { }
+			PageProperties._SidebarParent = Items["Content"].Instance
+			local NewPage = Library.Page(self.Window, PageProperties)
+			TableInsert(self.Pages, NewPage)
+			return NewPage
+		end
+
+		if PageSection.Collapsible then
+			local function ToggleSection()
+				PageSection:Toggle()
+			end
+
+			Items["Header"]:Connect("MouseButton1Down", ToggleSection)
+
+			if Items["Collapse"] then
+				Items["Collapse"]:Connect("MouseButton1Down", ToggleSection)
+			end
+		end
+
+		if not PageSection.Open then
+			PageSection:SetCollapsed(true)
+		end
+
+		return PageSection
+	end
 
 	Library.Page = function(self, Properties)
 		Properties = Properties or { }
@@ -5106,9 +6189,11 @@ local Library do
 			ColumnsData = { }
 		}
 
+		local SidebarParent = Properties._SidebarParent or Page.Window.Items["Pages"].Instance
+
 		local Items = { } do
 			Items["Inactive"] = Instances:Create("TextButton", {
-				Parent = Page.Window.Items["Pages"].Instance,
+				Parent = SidebarParent,
 				Name = "\0",
 				FontFace = Library.Font,
 				TextColor3 = FromRGB(0, 0, 0),
@@ -5375,6 +6460,8 @@ local Library do
 
 			Name = Properties.Name or Properties.name or "Section",
 			Side = Properties.Side or Properties.side or 1,
+			Collapsible = Properties.Collapsible == true or Properties.collapsible == true,
+			Open = Properties.Default ~= false and Properties.default ~= false,
 
 			Items = { }
 		}
@@ -5422,10 +6509,26 @@ local Library do
 				BorderSizePixel = 0,
 				ZIndex = 2,
 				TextSize = 14,
+				Active = Section.Collapsible,
 				BackgroundColor3 = FromRGB(255, 255, 255)
 			})  Items["Text"]:AddToTheme({TextColor3 = "Text"})
 
-			Instances:Create("Frame", {
+			if Section.Collapsible then
+				Items["Collapse"] = Instances:Create("ImageButton", {
+					Parent = Items["Section"].Instance,
+					Name = "\0",
+					Image = "rbxassetid://134878256295114",
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					Size = UDim2New(0, 14, 0, 14),
+					Position = UDim2New(1, -22, 0, 9),
+					ZIndex = 3,
+					ImageColor3 = FromRGB(255, 255, 255),
+					Rotation = Section.Open and 0 or -90
+				})  Items["Collapse"]:AddToTheme({ImageColor3 = "Text"})
+			end
+
+			Items["Divider"] = Instances:Create("Frame", {
 				Parent = Items["Section"].Instance,
 				Name = "\0",
 				Size = UDim2New(1, -16, 0, 1),
@@ -5434,7 +6537,7 @@ local Library do
 				ZIndex = 2,
 				BorderSizePixel = 0,
 				BackgroundColor3 = FromRGB(41, 37, 45)
-			}):AddToTheme({BackgroundColor3 = "Border"})
+			})  Items["Divider"]:AddToTheme({BackgroundColor3 = "Border"})
 
 			Items["Content"] = Instances:Create("Frame", {
 				Parent = Items["Section"].Instance,
@@ -5446,6 +6549,7 @@ local Library do
 				Size = UDim2New(1, -16, 0, 0),
 				ZIndex = 2,
 				AutomaticSize = Enum.AutomaticSize.Y,
+				Visible = Section.Open,
 				BackgroundColor3 = FromRGB(255, 255, 255)
 			})
 
@@ -5457,6 +6561,57 @@ local Library do
 			})
 
 			Section.Items = Items
+		end
+
+		function Section:GetState()
+			return self.Open
+		end
+
+		function Section:SetCollapsed(Bool)
+			Bool = not not Bool
+			self.Open = not Bool
+
+			Items["Content"].Instance.Visible = self.Open
+			Items["Divider"].Instance.Visible = self.Open
+
+			if Items["Collapse"] then
+				Items["Collapse"]:Tween(nil, {Rotation = self.Open and 0 or -90})
+			end
+		end
+
+		function Section:SetOpen(Bool)
+			self:SetCollapsed(not Bool)
+		end
+
+		function Section:Toggle()
+			self:SetCollapsed(self.Open)
+		end
+
+		function Section:SetVisible(Bool)
+			Items["Section"].Instance.Visible = not not Bool
+		end
+
+		function Section:SetName(Name)
+			Name = tostring(Name or "")
+			self.Name = Name
+			Items["Text"].Instance.Text = Name
+		end
+
+		if Section.Collapsible and Items["Collapse"] then
+			Items["Collapse"]:Connect("MouseButton1Down", function()
+				Section:Toggle()
+			end)
+
+			-- also allow clicking the title area to toggle
+			Items["Text"]:Connect("InputBegan", function(Input)
+				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+					Section:Toggle()
+				end
+			end)
+		end
+
+		if not Section.Open then
+			Section:SetCollapsed(true)
 		end
 
 		return setmetatable(Section, Library.Sections)
@@ -5997,19 +7152,35 @@ local Library do
 			Page = Button.Page,
 		})
 
-		function Button:Add(Text, Callback, Confirmation, Disabled, Tooltip)
-			local _NewButton = {
-				Text = Text,
-				Callback = Callback,
-				Confirmation = Confirmation,
-				Disabled = Disabled
-			}
+		function Button:Add(NameOrProps, Callback, Disabled, Tooltip, Color)
+			local Props = { }
 
-			local NewAddedButton, NewAddedButtonItems = NewButton:Add(Text, Callback, Confirmation, Disabled)
-			NewAddedButtonItems["NewButton"]:Tooltip(Tooltip)
+			if type(NameOrProps) == "table" then
+				Props = NameOrProps
+			else
+				Props.Name = NameOrProps
+				Props.Callback = Callback
+				Props.Disabled = Disabled
+				Props.Tooltip = Tooltip
+				Props.Color = Color
+			end
+
+			local NewAddedButton, NewAddedButtonItems = NewButton:Add(Props)
+
+			local _NewButton = {
+				Text = NewAddedButton.Text,
+				Callback = NewAddedButton.Callback,
+				Disabled = NewAddedButton.Disabled,
+				Color = NewAddedButton.Color
+			}
 
 			function _NewButton:SetText(Text)
 				NewAddedButton:SetText(Text)
+				self.Text = NewAddedButton.Text
+			end
+
+			function _NewButton:GetText()
+				return NewAddedButton:GetText()
 			end
 
 			function _NewButton:SetVisible(Bool)
@@ -6018,11 +7189,29 @@ local Library do
 
 			function _NewButton:SetDisabled(Bool)
 				NewAddedButton:SetDisabled(Bool)
+				self.Disabled = NewAddedButton.Disabled
 			end
 
-			function _NewButton:OnPressed(Callback)
-				NewAddedButton.OnPressed = Callback
-				Callback()
+			function _NewButton:GetDisabled()
+				return NewAddedButton:GetDisabled()
+			end
+
+			function _NewButton:SetColor(NewColor)
+				NewAddedButton:SetColor(NewColor)
+				self.Color = NewAddedButton.Color
+			end
+
+			function _NewButton:SetCallback(NewCallback)
+				NewAddedButton:SetCallback(NewCallback)
+				self.Callback = NewAddedButton.Callback
+			end
+
+			function _NewButton:Press()
+				NewAddedButton:Press()
+			end
+
+			function _NewButton:OnPressed(Cb)
+				NewAddedButton.OnPressed = Cb
 			end
 
 			return _NewButton
@@ -6193,6 +7382,93 @@ local Library do
 		end
 
 		return Dropdown
+	end
+
+	Library.Sections.SearchBox = function(self, Properties)
+		Properties = Properties or { }
+
+		local SearchBox = {
+			Window = self.Window,
+			Page = self.Page,
+			Section = self,
+
+			Name = Properties.Name or Properties.name or "SearchBox",
+			Flag = Properties.Flag or Properties.flag or Library:NextFlag(),
+			Default = Properties.Default or Properties.default or nil,
+			Items = Properties.Items or Properties.items or { },
+			Callback = Properties.Callback or Properties.callback or function() end,
+			Multi = Properties.Multi or Properties.multi or false,
+			OnChanged = Properties.OnChanged or Properties.onchanged or function() end,
+			Disabled = Properties.Disabled or Properties.disabled or false,
+			Tooltip = Properties.Tooltip or Properties.tooltip or nil
+		}
+
+		local NewSearchBox, SearchBoxItems = Components.SearchBox({
+			Name = SearchBox.Name,
+			Parent = SearchBox.Section.Items["Content"],
+			Flag = SearchBox.Flag,
+			Items = SearchBox.Items,
+			Default = SearchBox.Default,
+			Callback = SearchBox.Callback,
+			Multi = SearchBox.Multi,
+			Page = SearchBox.Page,
+			Window = SearchBox.Window,
+			OnChanged = SearchBox.OnChanged,
+			Disabled = SearchBox.Disabled
+		})
+
+		SearchBoxItems["SearchBox"]:Tooltip(SearchBox.Tooltip)
+
+		function SearchBox:Set(Items)
+			NewSearchBox:Set(Items)
+		end
+
+		function SearchBox:Get()
+			return NewSearchBox:Get()
+		end
+
+		function SearchBox:OnChanged(Callback)
+			NewSearchBox.OnChanged = Callback
+			Callback(NewSearchBox.Value)
+		end
+
+		function SearchBox:Remove(Option)
+			NewSearchBox:Remove(Option)
+		end
+
+		function SearchBox:Add(Option)
+			NewSearchBox:Add(Option)
+		end
+
+		function SearchBox:Clear()
+			NewSearchBox:Clear()
+		end
+
+		function SearchBox:SetDisabled(Bool)
+			NewSearchBox:SetDisabled(Bool)
+		end
+
+		function SearchBox:SetVisible(Bool)
+			NewSearchBox:SetVisible(Bool)
+		end
+
+		function SearchBox:Refresh(List)
+			NewSearchBox:Refresh(List)
+		end
+
+		function SearchBox:SetText(Text)
+			NewSearchBox:SetText(Text)
+		end
+
+		function SearchBox:SetMulti(Bool)
+			NewSearchBox:SetMulti(Bool)
+		end
+
+		function SearchBox:SetOpen(Bool)
+			NewSearchBox:SetOpen(Bool)
+		end
+
+		return SearchBox
 	end
 
 	Library.Sections.ToggleDropdown = function(self, Properties)
