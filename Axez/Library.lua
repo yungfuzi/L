@@ -1,12 +1,16 @@
-local Library = {}
+local Library = {
+	Version = "2.12.2",
+	Flags = {},
+	Windows = {},
+	Notifications = {},
+	ActiveTheme = "macOS Dark",
+	DPI = 1,
+}
 Library.__index = Library
-Library.Version = "2.4.0"
-Library.Flags = {}
-Library.Windows = {}
-Library.Notifications = {}
-Library.ActiveTheme = "macOS Dark"
-Library.DPI = 1
 
+local Section
+local Tab
+local Window
 
 local Players           = game:GetService("Players")
 local TweenService      = game:GetService("TweenService")
@@ -17,12 +21,61 @@ local RunService        = game:GetService("RunService")
 local CoreGui           = game:GetService("CoreGui")
 local HttpService       = game:GetService("HttpService")
 
-local LocalPlayer = Players.LocalPlayer
-local Mouse       = LocalPlayer:GetMouse()
+local function SafeParent()
+	local ok, hui = pcall(function()
+		if typeof(gethui) == "function" then
+			return gethui()
+		end
+		return nil
+	end)
+	if ok and hui then
+		return hui
+	end
 
-local cloneref   = cloneref or clonereference or function(i) return i end
-local gethui     = gethui or function() return CoreGui end
-local protectgui = protectgui or (syn and syn.protect_gui) or function() end
+	local player = Players.LocalPlayer
+	if not player then
+		local okWait, result = pcall(function()
+			return Players:GetPlayers()[1] or Players.PlayerAdded:Wait()
+		end)
+		if okWait then
+			player = result
+		end
+	end
+
+	if player then
+		local pg = player:FindFirstChildOfClass("PlayerGui")
+		if not pg then
+			local okPg, waited = pcall(function()
+				return player:WaitForChild("PlayerGui", 5)
+			end)
+			if okPg then
+				pg = waited
+			end
+		end
+		if pg then
+			return pg
+		end
+	end
+
+	local okCore, core = pcall(function()
+		return CoreGui
+	end)
+	if okCore and core then
+		return core
+	end
+
+	return nil
+end
+
+local function SafeProtect(gui)
+	pcall(function()
+		if typeof(protectgui) == "function" then
+			protectgui(gui)
+		elseif syn and type(syn) == "table" and syn.protect_gui then
+			syn.protect_gui(gui)
+		end
+	end)
+end
 
 
 export type ThemeTokens = {
@@ -58,6 +111,10 @@ export type WindowConfig = {
 	Center: boolean?,
 	Icon: string?,
 	CompactTab: boolean?,
+	ElementsRow: {
+		Enabled: boolean?,
+		Type: string?,
+	}?,
 }
 
 export type SectionConfig = {
@@ -150,7 +207,7 @@ local FONT_BOLD = Enum.Font.GothamBold
 local FONT_SEMIBOLD = Enum.Font.GothamSemibold
 
 local DEFAULT_CORNER = 10
-local SIDEBAR_WIDTH = 200
+local SIDEBAR_WIDTH = 150
 local HEADER_HEIGHT = 48
 local ROW_HEIGHT = 36
 local SECTION_GAP = 12
@@ -190,14 +247,20 @@ function Utility.IsMobile()
 end
 
 function Utility.GetTextBounds(text: string, font: Enum.Font, size: number, width: number?)
-	local params = Instance.new("GetTextBoundsParams")
-	params.Text = text
-	params.Font = Font.fromEnum(font)
-	params.Size = size
-	params.Width = width or 0
-	local bounds = TextService:GetTextBoundsAsync(params)
-	params:Destroy()
-	return bounds
+	local ok, bounds = pcall(function()
+		local params = Instance.new("GetTextBoundsParams")
+		params.Text = text or ""
+		params.Font = Font.fromEnum(font)
+		params.Size = size
+		params.Width = width or 0
+		local b = TextService:GetTextBoundsAsync(params)
+		params:Destroy()
+		return b
+	end)
+	if ok and bounds then
+		return bounds
+	end
+	return Vector2.new(#(text or "") * (size * 0.5), size + 4)
 end
 
 function Utility.Create(class: string, props: {[string]: any}?, children: {Instance}?)
@@ -228,7 +291,7 @@ function Utility.AddShadow(parent: Instance, opts: {
 	Spread: UDim2?,
 	Transparency: number?,
 	ZIndex: number?,
-}?)
+	}?)
 	opts = opts or {}
 	local ok, shadow = pcall(function()
 		local s = Instance.new("UIShadow")
@@ -466,7 +529,105 @@ local function Tween(obj: Instance, goal: {[string]: any}, info: TweenInfo?)
 end
 
 local function QuickTween(obj: Instance, goal: {[string]: any}, duration: number?)
-	return Tween(obj, goal, TweenInfo.new(duration or 0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
+	return Tween(obj, goal, TweenInfo.new(duration or 0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out))
+end
+
+local function SpringTween(obj: Instance, goal: {[string]: any}, frequency: number?)
+	local freq = frequency or 8
+	local duration = math.clamp(1.15 / freq, 0.12, 0.45)
+	return Tween(obj, goal, TweenInfo.new(duration, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out))
+end
+
+local SpringMotors: {[Instance]: {[string]: any}} = {}
+
+local function SpringMotor(initial: number, obj: Instance, prop: string, useImplicit: boolean?)
+	local motor = {
+		_value = initial,
+		_goal = initial,
+		_velocity = 0,
+		_frequency = 8,
+		_damping = 1,
+		_running = false,
+		_conn = nil,
+	}
+
+	local function stop()
+		if motor._conn then
+			motor._conn:Disconnect()
+			motor._conn = nil
+		end
+		motor._running = false
+	end
+
+	local function step(dt: number)
+		local f = motor._frequency * 2 * math.pi
+		local d = motor._damping
+		local target = motor._goal
+		local x = motor._value - target
+		local v = motor._velocity
+
+		local exp = math.exp(-d * f * dt)
+		local newX, newV
+		if math.abs(d - 1) < 1e-4 then
+			newX = (x * (1 + f * dt) + v * dt) * exp
+			newV = (v * (1 - f * dt) - x * (f * f * dt)) * exp
+		else
+			local o = math.sqrt(math.max(1e-6, 1 - d * d))
+			local cos = math.cos(f * o * dt)
+			local sin = math.sin(f * o * dt)
+			local t = sin / math.max(o, 1e-6)
+			local u = sin / math.max(f * o, 1e-6)
+			newX = (x * (cos + d * t) + v * u) * exp
+			newV = (v * (cos - t * d) - x * (t * f)) * exp
+		end
+
+		motor._value = newX + target
+		motor._velocity = newV
+
+		pcall(function()
+			obj[prop] = motor._value
+		end)
+
+		if math.abs(newV) < 0.001 and math.abs(newX) < 0.001 then
+			motor._value = target
+			motor._velocity = 0
+			pcall(function()
+				obj[prop] = target
+			end)
+			stop()
+		end
+	end
+
+	function motor:setGoal(goal: number, frequency: number?)
+		self._goal = goal
+		if frequency then
+			self._frequency = frequency
+		end
+		if not self._running then
+			self._running = true
+			self._conn = RunService.RenderStepped:Connect(function(dt)
+				step(math.min(dt, 0.05))
+			end)
+		end
+	end
+
+	function motor:setInstant(goal: number)
+		stop()
+		self._goal = goal
+		self._value = goal
+		self._velocity = 0
+		pcall(function()
+			obj[prop] = goal
+		end)
+	end
+
+	function motor:Destroy()
+		stop()
+	end
+
+	SpringMotors[obj] = SpringMotors[obj] or {}
+	SpringMotors[obj][prop] = motor
+	return motor
 end
 
 
@@ -488,6 +649,14 @@ local Icons = {
 	user       = "rbxassetid://10734948424",
 	folder     = "rbxassetid://10734883381",
 	star       = "rbxassetid://10734952273",
+	eye        = "rbxassetid://10723415040",
+	target     = "rbxassetid://10734977012",
+	zap        = "rbxassetid://10723345749",
+	shield     = "rbxassetid://10734951847",
+	sword      = "rbxassetid://10734975486",
+	home       = "rbxassetid://10747373176",
+	list       = "rbxassetid://10734943674",
+	box        = "rbxassetid://10709782497",
 }
 
 local function ResolveIcon(name: string?): string?
@@ -510,34 +679,72 @@ local function CreateIcon(parent: Instance, name: string?, size: number?)
 	return icon
 end
 
+local function ApplyRowIcon(parent: Frame, iconName: string?, rowHeight: number?, yOffset: number?)
+	if not iconName or iconName == "" then
+		return 0, nil
+	end
+	local h = rowHeight or 36
+	local icon = CreateIcon(parent, iconName, 16)
+	local y = yOffset
+	if y == nil then
+		y = math.floor((h - 16) / 2)
+	end
+	icon.Position = UDim2.fromOffset(0, y)
+	icon.ImageColor3 = Library:GetTheme().TextSecondary
+	return 22, icon
+end
+
 
 local TooltipGui: ScreenGui? = nil
 local TooltipFrame: Frame? = nil
 local TooltipLabel: TextLabel? = nil
 local TooltipHideToken = 0
 
+local function FindScreenGui(inst: Instance?): ScreenGui?
+	local p = inst
+	while p do
+		if p:IsA("ScreenGui") then
+			return p
+		end
+		p = p.Parent
+	end
+	return nil
+end
+
 local function EnsureTooltip()
-	if TooltipGui and TooltipGui.Parent then return end
-	TooltipGui = Utility.Create("ScreenGui", {
-		Name = "LibraryTooltip",
-		ResetOnSpawn = false,
-		IgnoreGuiInset = true,
-		DisplayOrder = 200,
-		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	})
-	pcall(protectgui, TooltipGui)
-	TooltipGui.Parent = gethui()
+	if TooltipFrame and TooltipFrame.Parent then return end
+
+	if not TooltipGui or not TooltipGui.Parent then
+		TooltipGui = Utility.Create("ScreenGui", {
+			Name = "LibraryTooltip",
+			ResetOnSpawn = false,
+			IgnoreGuiInset = true,
+			DisplayOrder = 1000,
+			ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		})
+		SafeProtect(TooltipGui)
+		local tipParent = SafeParent()
+		if tipParent then
+			TooltipGui.Parent = tipParent
+		end
+	end
 
 	TooltipFrame = Utility.Create("Frame", {
+		Name = "Tooltip",
 		BackgroundColor3 = Library:GetTheme().SurfaceSecondary,
-		Size = UDim2.fromOffset(0, 0),
-		AutomaticSize = Enum.AutomaticSize.XY,
+		BorderSizePixel = 0,
+		Size = UDim2.fromOffset(80, 28),
 		Visible = false,
 		Parent = TooltipGui,
-		ZIndex = 100,
+		ZIndex = 10000,
 	})
 	RegisterTheme(TooltipFrame, "BackgroundColor3", "SurfaceSecondary")
 	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = TooltipFrame })
+	Utility.Create("UIStroke", {
+		Color = Library:GetTheme().Border,
+		Thickness = 1,
+		Parent = TooltipFrame,
+	})
 	Utility.Create("UIPadding", {
 		PaddingTop = UDim.new(0, 6),
 		PaddingBottom = UDim.new(0, 6),
@@ -557,7 +764,9 @@ local function EnsureTooltip()
 		TextColor3 = Library:GetTheme().Text,
 		Font = FONT,
 		TextSize = 12,
-		AutomaticSize = Enum.AutomaticSize.XY,
+		Size = UDim2.fromScale(1, 1),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Center,
 		Parent = TooltipFrame,
 	})
 	RegisterTheme(TooltipLabel, "TextColor3", "Text")
@@ -570,44 +779,63 @@ local function ShowTooltip(text: string, anchor: GuiObject)
 	local token = TooltipHideToken
 
 	TooltipLabel.Text = text
-	TooltipFrame.Visible = true
-	TooltipFrame.Size = UDim2.fromOffset(0, 0)
 
-	task.defer(function()
-		if token ~= TooltipHideToken then return end
-		RunService.Heartbeat:Wait()
+	local bounds = Utility.GetTextBounds(text, FONT, 12)
+	local tipW = math.clamp(math.ceil(bounds.X) + 20, 48, 320)
+	local tipH = math.clamp(math.ceil(bounds.Y) + 12, 24, 80)
+	TooltipFrame.Size = UDim2.fromOffset(tipW, tipH)
+
+	local host = FindScreenGui(anchor) or TooltipGui
+	if host and TooltipFrame.Parent ~= host then
+		TooltipFrame.Parent = host
+	end
+
+	TooltipFrame.Visible = true
+	TooltipFrame.ZIndex = 10000
+
+	local function place()
 		if token ~= TooltipHideToken then return end
 
 		local cam = workspace.CurrentCamera
 		local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+		local mouse = UserInputService:GetMouseLocation()
 		local inset = GuiService:GetGuiInset()
-		local absPos = anchor.AbsolutePosition
-		local absSize = anchor.AbsoluteSize
-		local tipSize = TooltipFrame.AbsoluteSize
-		if tipSize.X < 4 or tipSize.Y < 4 then
-			tipSize = Vector2.new(math.max(80, #text * 7), 28)
+		local hostGui = FindScreenGui(TooltipFrame)
+
+		local mx, my = mouse.X, mouse.Y
+		if hostGui and hostGui.IgnoreGuiInset then
+			mx = mx + inset.X
+			my = my + inset.Y
 		end
 
-		local gap = 10
-		local x = absPos.X + absSize.X * 0.5 - tipSize.X * 0.5
-		local y = absPos.Y - tipSize.Y - gap
+		local gapX, gapY = 14, 18
+		local x = mx + gapX
+		local y = my + gapY
 
-		if y < inset.Y + 6 then
-			y = absPos.Y + absSize.Y + gap
+		if x + tipW > vp.X - 4 then
+			x = mx - tipW - 8
 		end
-		if y + tipSize.Y > vp.Y - 6 then
-			y = math.max(inset.Y + 6, absPos.Y - tipSize.Y - gap)
+		if y + tipH > vp.Y - 4 then
+			y = my - tipH - 8
 		end
-		x = math.clamp(x, 6, math.max(6, vp.X - tipSize.X - 6))
+
+		x = math.clamp(x, 4, math.max(4, vp.X - tipW - 4))
+		y = math.clamp(y, 4, math.max(4, vp.Y - tipH - 4))
 
 		TooltipFrame.Position = UDim2.fromOffset(math.floor(x + 0.5), math.floor(y + 0.5))
-	end)
+	end
+
+	place()
+	task.defer(place)
 end
 
 local function HideTooltip()
 	TooltipHideToken += 1
 	if TooltipFrame then
 		TooltipFrame.Visible = false
+		if TooltipGui and TooltipFrame.Parent ~= TooltipGui then
+			TooltipFrame.Parent = TooltipGui
+		end
 	end
 end
 
@@ -617,7 +845,7 @@ local function BindTooltip(target: GuiObject, textGetter: () -> string)
 
 	local function tryShow()
 		hovering = true
-		task.delay(0.35, function()
+		task.delay(0.1, function()
 			if not hovering then return end
 			local text = textGetter()
 			if text and text ~= "" then
@@ -795,11 +1023,111 @@ function Component:Get()
 	return self.Value
 end
 
+function Component:GetValue()
+	return self.Value
+end
+
 function Component:Set(value, silent)
+end
+
+function Component:SetValue(value, silent)
+	return self:Set(value, silent)
 end
 
 function Component:OnChanged(fn)
 	return self.Changed:Connect(fn)
+end
+
+function Component:IsVisible()
+	return self.Visible ~= false
+end
+
+function Component:IsDisabled()
+	return self.Disabled == true
+end
+
+function Component:SetText(text: string)
+	if self._TitleLabel then
+		self._TitleLabel.Text = text or ""
+	elseif self.Label then
+		self.Label.Text = text or ""
+	end
+	if self.Config then
+		self.Config.Name = text
+	end
+end
+
+function Component:GetText()
+	if self.Config and self.Config.Name then
+		return self.Config.Name
+	end
+	if self._TitleLabel then
+		return self._TitleLabel.Text
+	end
+	return ""
+end
+
+function Component:Update(config)
+	if type(config) ~= "table" then return self end
+	for k, v in pairs(config) do
+		self.Config[k] = v
+	end
+	if config.Name then
+		self:SetText(config.Name)
+	end
+	if config.Disabled ~= nil then
+		self:SetDisabled(config.Disabled)
+	end
+	if config.Default ~= nil and self.Set then
+		self:Set(config.Default, true)
+	end
+	if config.Visible ~= nil then
+		self:SetVisible(config.Visible)
+	end
+	return self
+end
+
+function Component:SetTooltip(text: string)
+	self.Config = self.Config or {}
+	self.Config.Tooltip = text
+	if self._TooltipMaid then
+		self._TooltipMaid:Destroy()
+		self._TooltipMaid = nil
+	end
+	if text and text ~= "" and self.Frame then
+		self._TooltipMaid = BindTooltip(self.Frame, function() return self.Config.Tooltip end)
+		self.Maid:Give(self._TooltipMaid)
+	end
+	return self
+end
+
+function Component:SetCallback(fn)
+	self.Config = self.Config or {}
+	self.Config.Callback = fn
+	return self
+end
+
+function Component:SetFlag(flag: string)
+	if not flag then return self end
+	self.Config.Flag = flag
+	RegisterFlag(flag, self, self.Value, self.Config.Name, self.Config.Type or "Component")
+	return self
+end
+
+function Component:Toggle()
+	if type(self.Value) == "boolean" and self.Set then
+		self:Set(not self.Value)
+	end
+	return self
+end
+
+function Component:Refresh()
+	if self.Set and self.Value ~= nil then
+		local v = self.Value
+		self.Value = nil
+		self:Set(v, true)
+	end
+	return self
 end
 
 
@@ -864,8 +1192,22 @@ end
 local Button = setmetatable({}, { __index = Component })
 Button.__index = Button
 
+local function RelayoutButtonRow(section)
+	local slots = section._ButtonSlots
+	if not slots or #slots == 0 then return end
+	local n = #slots
+	local pad = 8
+	for i, slot in ipairs(slots) do
+		if n == 1 then
+			slot.Size = UDim2.new(1, 0, 1, 0)
+		else
+			slot.Size = UDim2.new(1 / n, -math.floor(pad * (n - 1) / n), 1, 0)
+		end
+	end
+end
+
 local function EnsureButtonRow(section)
-	if not section._ButtonRow or section._ButtonRowCount >= 3 then
+	if not section._ButtonRow or (section._ButtonRowCount or 0) >= 3 then
 		local row = Utility.Create("Frame", {
 			Name = "ButtonRow",
 			BackgroundTransparency = 1,
@@ -882,6 +1224,7 @@ local function EnsureButtonRow(section)
 		})
 		section._ButtonRow = row
 		section._ButtonRowCount = 0
+		section._ButtonSlots = {}
 	end
 	return section._ButtonRow
 end
@@ -898,9 +1241,11 @@ function Button.new(section, config: ButtonConfig)
 	local frame = Utility.Create("Frame", {
 		Name = "ButtonSlot",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1 / 3, -6, 1, 0),
+		Size = UDim2.new(1, 0, 1, 0),
 		Parent = row,
 	})
+	table.insert(section._ButtonSlots, frame)
+	RelayoutButtonRow(section)
 	self.Frame = frame
 
 	local bgColor = customColor or tokens.SurfaceSecondary
@@ -953,11 +1298,11 @@ function Button.new(section, config: ButtonConfig)
 	local function setState(state)
 		if self.Disabled then return end
 		if state == "hover" then
-			QuickTween(btn, { BackgroundColor3 = hoverColor })
+			SpringTween(btn, { BackgroundColor3 = hoverColor }, 9)
 		elseif state == "press" then
-			QuickTween(btn, { BackgroundColor3 = pressColor })
+			SpringTween(btn, { BackgroundColor3 = pressColor }, 12)
 		else
-			QuickTween(btn, { BackgroundColor3 = baseColor })
+			SpringTween(btn, { BackgroundColor3 = baseColor }, 8)
 		end
 	end
 
@@ -984,12 +1329,313 @@ function Button.new(section, config: ButtonConfig)
 		btn.BackgroundTransparency = disabled and 0.35 or 0
 	end
 
+	function self:AddButton(nextConfig)
+		if type(nextConfig) == "string" then
+			nextConfig = { Name = nextConfig }
+		end
+		nextConfig = nextConfig or {}
+		local section = self.Section
+		if not section or section.Destroyed then
+			return self
+		end
+		local sibling = Button.new(section, nextConfig)
+		table.insert(section.Components, sibling)
+		return sibling
+	end
+
 	return self
 end
 
 
 local Toggle = setmetatable({}, { __index = Component })
 Toggle.__index = Toggle
+
+
+local LINK_ICON = "rbxassetid://101330725759187"
+local ActiveLinkPopup = nil
+
+local function CloseLinkPopup()
+	if ActiveLinkPopup then
+		local data = ActiveLinkPopup
+		ActiveLinkPopup = nil
+		if data.Content and data.Storage and data.Content.Parent then
+			data.Content.Parent = data.Storage
+		end
+		if data.Popup then
+			data.Popup:Destroy()
+		end
+	end
+end
+
+local function BuildLinkProxy(component)
+	local storage = Utility.Create("Frame", {
+		Name = "LinkStorage",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(204, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Visible = false,
+		Parent = component.Frame,
+	})
+
+	local content = Utility.Create("Frame", {
+		Name = "LinkContent",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = storage,
+	})
+	Utility.Create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 6),
+		Parent = content,
+	})
+	Utility.Create("UIPadding", {
+		PaddingTop = UDim.new(0, 2),
+		PaddingBottom = UDim.new(0, 2),
+		Parent = content,
+	})
+
+	local proxy = {
+		Content = content,
+		Frame = content,
+		Components = {},
+		_ButtonRow = nil,
+		_ButtonRowCount = 0,
+		_ButtonSlots = nil,
+		Tab = component.Section and component.Section.Tab or nil,
+		Destroyed = false,
+		_Storage = storage,
+		_Component = component,
+	}
+
+	local function add(methodName, cfg)
+		if not Section or not Section[methodName] then
+			warn("[Library] Link: Section." .. methodName .. " unavailable")
+			return nil
+		end
+		return Section[methodName](proxy, cfg)
+	end
+
+	function proxy:AddToggle(cfg) return add("AddToggle", cfg) end
+	function proxy:AddSlider(cfg) return add("AddSlider", cfg) end
+	function proxy:AddDropdown(cfg) return add("AddDropdown", cfg) end
+	function proxy:AddMultiDropdown(cfg) return add("AddMultiDropdown", cfg) end
+	function proxy:AddButton(cfg) return add("AddButton", cfg) end
+	function proxy:AddInput(cfg) return add("AddInput", cfg) end
+	function proxy:AddKeybind(cfg) return add("AddKeybind", cfg) end
+	function proxy:AddColorPicker(cfg) return add("AddColorPicker", cfg) end
+	function proxy:AddLabel(cfg) return add("AddLabel", cfg) end
+	function proxy:AddParagraph(cfg) return add("AddParagraph", cfg) end
+	function proxy:AddDivider(cfg) return add("AddDivider", cfg) end
+	function proxy:AddSpace(cfg) return add("AddSpace", cfg) end
+
+	function proxy:Destroy()
+		CloseLinkPopup()
+		for _, c in ipairs(self.Components) do
+			pcall(function() c:Destroy() end)
+		end
+		storage:Destroy()
+	end
+
+	return proxy
+end
+
+local function OpenLinkPopup(component)
+	if not component._LinkProxy then return end
+	CloseLinkPopup()
+
+	local tokens = Library:GetTheme()
+	local window = component.Section and component.Section.Tab and component.Section.Tab.Window
+	local parent = (window and window.ScreenGui) or SafeParent()
+	if not parent then return end
+
+	local anchor = component._LinkButton
+	local POPUP_W = 220
+	local POPUP_MAX_H = 220
+
+	local popup = Utility.Create("Frame", {
+		Name = "LinkPopup",
+		BackgroundColor3 = tokens.Surface,
+		Size = UDim2.fromOffset(POPUP_W, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = parent,
+		ZIndex = 300,
+		ClipsDescendants = true,
+	})
+	RegisterTheme(popup, "BackgroundColor3", "Surface")
+	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = popup })
+	Utility.Create("UIStroke", { Color = tokens.Border, Thickness = 1, Parent = popup })
+	Utility.AddShadow(popup, { BlurRadius = 16, Transparency = 0.4, Offset = UDim2.fromOffset(0, 4) })
+	Utility.Create("UIPadding", {
+		PaddingTop = UDim.new(0, 8),
+		PaddingBottom = UDim.new(0, 8),
+		PaddingLeft = UDim.new(0, 8),
+		PaddingRight = UDim.new(0, 8),
+		Parent = popup,
+	})
+	Utility.Create("UISizeConstraint", {
+		MaxSize = Vector2.new(POPUP_W, POPUP_MAX_H),
+		Parent = popup,
+	})
+
+	local scroll = Utility.Create("ScrollingFrame", {
+		Name = "LinkScroll",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 3,
+		ScrollBarImageTransparency = 0.5,
+		BorderSizePixel = 0,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		Parent = popup,
+	})
+	Utility.Create("UISizeConstraint", {
+		MaxSize = Vector2.new(POPUP_W - 16, POPUP_MAX_H - 16),
+		Parent = scroll,
+	})
+
+	local proxy = component._LinkProxy
+	proxy.Content.Visible = true
+	proxy.Content.Size = UDim2.new(1, 0, 0, 0)
+	proxy.Content.AutomaticSize = Enum.AutomaticSize.Y
+	proxy.Content.Parent = scroll
+	if #proxy.Components == 0 then
+		local empty = CreateLabel(scroll, "No options", 11, "TextSecondary")
+		empty.Size = UDim2.new(1, 0, 0, 20)
+		empty.TextXAlignment = Enum.TextXAlignment.Center
+	end
+
+	local abs = anchor.AbsolutePosition
+	local asz = anchor.AbsoluteSize
+	local cam = workspace.CurrentCamera
+	local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+	local x = abs.X + asz.X + 6
+	local y = abs.Y
+	if x + POPUP_W > vp.X - 8 then
+		x = abs.X - POPUP_W - 6
+	end
+	y = math.clamp(y, 8, math.max(8, vp.Y - POPUP_MAX_H - 12))
+	popup.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
+
+	local scale = Utility.Create("UIScale", { Scale = 0.96, Parent = popup })
+	SpringTween(scale, { Scale = 1 }, 10)
+
+	ActiveLinkPopup = {
+		Popup = popup,
+		Content = proxy.Content,
+		Storage = proxy._Storage,
+		Component = component,
+	}
+	component._LinkOpen = true
+
+	local function pointIn(gui, x, y)
+		if not gui or not gui.Parent then return false end
+		local p = gui.AbsolutePosition
+		local s = gui.AbsoluteSize
+		if s.X < 1 or s.Y < 1 then return false end
+		return x >= p.X and x <= p.X + s.X and y >= p.Y and y <= p.Y + s.Y
+	end
+
+	local function mouseInsideLink()
+		local m = UserInputService:GetMouseLocation()
+		local inset = GuiService:GetGuiInset()
+		local pts = {
+			m,
+			Vector2.new(m.X - inset.X, m.Y - inset.Y),
+			Vector2.new(m.X + inset.X, m.Y + inset.Y),
+		}
+		for _, pt in ipairs(pts) do
+			if pointIn(popup, pt.X, pt.Y) or pointIn(anchor, pt.X, pt.Y) then
+				return true
+			end
+			if proxy.Content and pointIn(proxy.Content, pt.X, pt.Y) then
+				return true
+			end
+		end
+		local ok, objs = pcall(function()
+			local pos = m - inset
+			return parent:GetGuiObjectsAtPosition(pos.X, pos.Y)
+		end)
+		if ok and type(objs) == "table" then
+			for _, obj in ipairs(objs) do
+				if obj == popup or obj:IsDescendantOf(popup) then
+					return true
+				end
+				if obj == anchor or (anchor and obj:IsDescendantOf(anchor)) then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	local closeConn
+	closeConn = UserInputService.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+		task.delay(0.05, function()
+			if not popup.Parent then
+				if closeConn then closeConn:Disconnect() end
+				return
+			end
+			if mouseInsideLink() then
+				return
+			end
+			component._LinkOpen = false
+			CloseLinkPopup()
+			if closeConn then closeConn:Disconnect() end
+		end)
+	end)
+end
+
+local function AttachLinkButton(component, frame, isToggle)
+	local tokens = Library:GetTheme()
+	local linkBtn = Utility.Create("ImageButton", {
+		Name = "LinkButton",
+		BackgroundTransparency = 1,
+		Image = LINK_ICON,
+		Size = UDim2.fromOffset(18, 18),
+		Position = isToggle and UDim2.new(1, -70, 0.5, -9) or UDim2.new(1, -22, 0.5, -9),
+		ImageColor3 = tokens.TextSecondary,
+		ScaleType = Enum.ScaleType.Fit,
+		Visible = false,
+		Parent = frame,
+		ZIndex = 5,
+	})
+	RegisterTheme(linkBtn, "ImageColor3", "TextSecondary")
+
+	component._LinkButton = linkBtn
+	component._LinkOpen = false
+	component._LinkProxy = nil
+
+	function component:Link()
+		if self._LinkProxy then
+			return self._LinkProxy
+		end
+		if self._LinkButton then
+			self._LinkButton.Visible = true
+		end
+		self._LinkProxy = BuildLinkProxy(self)
+		return self._LinkProxy
+	end
+
+	component.Maid:Give(linkBtn.Activated:Connect(function()
+		if component.Disabled then return end
+		if component._LinkOpen and ActiveLinkPopup then
+			component._LinkOpen = false
+			CloseLinkPopup()
+			return
+		end
+		OpenLinkPopup(component)
+	end))
+
+	return linkBtn
+end
+
 
 function Toggle.new(section, config: ToggleConfig)
 	local self = Component.new(section, config)
@@ -1001,23 +1647,40 @@ function Toggle.new(section, config: ToggleConfig)
 	end
 
 	local tokens = Library:GetTheme()
-	local frame = CreateRow(section.Content, 44)
+	local hasDesc = type(config.Description) == "string" and config.Description ~= ""
+	local rowH = hasDesc and 52 or 36
+	local frame = CreateRow(section.Content, rowH)
 	self.Frame = frame
 
 	local left = Utility.Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -60, 1, 0),
+		Size = UDim2.new(1, -78, 1, 0),
 		Parent = frame,
 	})
 
-	local title = CreateLabel(left, config.Name or "Toggle", 14, "Text")
-	title.Size = UDim2.new(1, 0, 0, 18)
-	title.Position = UDim2.fromOffset(0, 4)
+	local iconPad = 0
+	local rowIcon = nil
+	if config.Icon and config.Icon ~= "" then
+		rowIcon = CreateIcon(left, config.Icon, 16)
+		rowIcon.Position = UDim2.fromOffset(0, hasDesc and 7 or math.floor((rowH - 16) / 2))
+		rowIcon.ImageColor3 = Library:GetTheme().TextSecondary
+		iconPad = 22
+	end
+	self._IconLabel = rowIcon
 
-	if config.Description then
+	local title = CreateLabel(left, config.Name or "Toggle", 14, "Text")
+	title.Size = UDim2.new(1, -iconPad, 0, hasDesc and 18 or rowH)
+	title.Position = UDim2.fromOffset(iconPad, hasDesc and 6 or 0)
+	title.TextYAlignment = hasDesc and Enum.TextYAlignment.Top or Enum.TextYAlignment.Center
+	self._TitleLabel = title
+
+	if hasDesc then
 		local desc = CreateLabel(left, config.Description, 12, "TextSecondary")
 		desc.Size = UDim2.new(1, 0, 0, 16)
-		desc.Position = UDim2.fromOffset(0, 22)
+		desc.Position = UDim2.fromOffset(0, 26)
+		desc.TextYAlignment = Enum.TextYAlignment.Top
+		desc.TextWrapped = true
+		self._DescLabel = desc
 	end
 
 	local track = Utility.Create("Frame", {
@@ -1055,10 +1718,10 @@ function Toggle.new(section, config: ToggleConfig)
 		self.Value = value
 
 		local t = Library:GetTheme()
-		QuickTween(track, { BackgroundColor3 = value and t.Accent or t.SurfaceTertiary })
-		QuickTween(knob, {
+		SpringTween(track, { BackgroundColor3 = value and t.Accent or t.SurfaceTertiary }, 10)
+		SpringTween(knob, {
 			Position = value and UDim2.new(1, -24, 0.5, -11) or UDim2.fromOffset(2, 2)
-		})
+		}, 10)
 
 		if config.Flag and Library.Flags[config.Flag] then
 			Library.Flags[config.Flag].Value = value
@@ -1082,6 +1745,8 @@ function Toggle.new(section, config: ToggleConfig)
 		self:SetDisabled(true)
 	end
 
+	AttachLinkButton(self, frame, true)
+
 	return self
 end
 
@@ -1104,21 +1769,29 @@ function Slider.new(section, config: SliderConfig)
 	local tokens = Library:GetTheme()
 	local frame = Utility.Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 56),
+		Size = UDim2.new(1, 0, 0, 52),
 		Parent = section.Content,
 	})
 	self.Frame = frame
 
+	local iconPad = 0
+	if config.Icon then
+		local ic = CreateIcon(frame, config.Icon, 16)
+		ic.Position = UDim2.fromOffset(0, 2)
+		iconPad = 22
+		self._IconLabel = ic
+	end
 	local title = CreateLabel(frame, config.Name or "Slider", 14, "Text")
-	title.Size = UDim2.new(1, -70, 0, 18)
-	title.Position = UDim2.fromOffset(0, 2)
+	title.Size = UDim2.new(1, -(70 + iconPad), 0, 18)
+	title.Position = UDim2.fromOffset(iconPad, 0)
+	self._TitleLabel = title
 
 	local valueBox = Utility.Create("TextBox", {
-		BackgroundColor3 = tokens.SurfaceSecondary,
-		Size = UDim2.fromOffset(64, 20),
-		Position = UDim2.new(1, -64, 0, 1),
+		BackgroundColor3 = tokens.SurfaceTertiary,
+		Size = UDim2.fromOffset(56, 22),
+		Position = UDim2.new(1, -56, 0, 0),
 		Text = tostring(self.Value),
-		TextColor3 = tokens.TextSecondary,
+		TextColor3 = tokens.Text,
 		PlaceholderText = "",
 		Font = FONT,
 		TextSize = 12,
@@ -1126,14 +1799,29 @@ function Slider.new(section, config: SliderConfig)
 		ClearTextOnFocus = false,
 		Parent = frame,
 	})
-	RegisterTheme(valueBox, "BackgroundColor3", "SurfaceSecondary")
-	RegisterTheme(valueBox, "TextColor3", "TextSecondary")
-	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = valueBox })
+	RegisterTheme(valueBox, "BackgroundColor3", "SurfaceTertiary")
+	RegisterTheme(valueBox, "TextColor3", "Text")
+	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = valueBox })
+	Utility.Create("UIPadding", {
+		PaddingLeft = UDim.new(0, 4),
+		PaddingRight = UDim.new(0, 4),
+		Parent = valueBox,
+	})
+
+	local minLbl = CreateLabel(frame, tostring(min), 11, "TextTertiary")
+	minLbl.Size = UDim2.fromOffset(36, 14)
+	minLbl.Position = UDim2.fromOffset(0, 34)
+	minLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+	local maxLbl = CreateLabel(frame, tostring(max), 11, "TextTertiary")
+	maxLbl.Size = UDim2.fromOffset(36, 14)
+	maxLbl.Position = UDim2.new(1, -36, 0, 34)
+	maxLbl.TextXAlignment = Enum.TextXAlignment.Right
 
 	local track = Utility.Create("Frame", {
 		BackgroundColor3 = tokens.SurfaceTertiary,
-		Size = UDim2.new(1, 0, 0, 6),
-		Position = UDim2.fromOffset(0, 32),
+		Size = UDim2.new(1, -80, 0, 6),
+		Position = UDim2.fromOffset(40, 38),
 		Parent = frame,
 	})
 	RegisterTheme(track, "BackgroundColor3", "SurfaceTertiary")
@@ -1149,22 +1837,33 @@ function Slider.new(section, config: SliderConfig)
 
 	local knob = Utility.Create("Frame", {
 		BackgroundColor3 = Color3.new(1, 1, 1),
-		Size = UDim2.fromOffset(16, 16),
-		Position = UDim2.new((self.Value - min) / math.max(max - min, 1e-6), -8, 0.5, -8),
+		Size = UDim2.fromOffset(14, 14),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new((self.Value - min) / math.max(max - min, 1e-6), 0, 0.5, 0),
 		Parent = track,
-		ZIndex = 2,
+		ZIndex = 3,
 	})
 	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = knob })
-	Utility.AddShadow(knob, { BlurRadius = 5, Transparency = 0.45, Offset = UDim2.fromOffset(0, 1) })
+	Utility.AddShadow(knob, { BlurRadius = 6, Transparency = 0.4, Offset = UDim2.fromOffset(0, 1) })
+
+	local hit = Utility.Create("TextButton", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 20),
+		Position = UDim2.fromOffset(0, -7),
+		Text = "",
+		ZIndex = 4,
+		Parent = track,
+	})
 
 	local dragging = false
 
 	local function updateFromX(x)
-		local rel = Utility.Clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+		local ap = track.AbsolutePosition.X
+		local as = track.AbsoluteSize.X
+		if as < 1 then return end
+		local rel = Utility.Clamp((x - ap) / as, 0, 1)
 		local raw = min + (max - min) * rel
-		local value = Utility.Round(raw, rounding)
-		value = Utility.Clamp(value, min, max)
-		self:Set(value)
+		self:Set(Utility.Clamp(Utility.Round(raw, rounding), min, max))
 	end
 
 	function self:Set(value: number, silent: boolean?)
@@ -1174,8 +1873,8 @@ function Slider.new(section, config: SliderConfig)
 		self.Value = value
 
 		local pct = (value - min) / math.max(max - min, 1e-6)
-		QuickTween(fill, { Size = UDim2.new(pct, 0, 1, 0) })
-		QuickTween(knob, { Position = UDim2.new(pct, -8, 0.5, -8) })
+		SpringTween(fill, { Size = UDim2.new(pct, 0, 1, 0) }, 10)
+		SpringTween(knob, { Position = UDim2.new(pct, 0, 0.5, 0) }, 10)
 		if not valueBox:IsFocused() then
 			valueBox.Text = tostring(value)
 		end
@@ -1198,7 +1897,7 @@ function Slider.new(section, config: SliderConfig)
 		end
 	end))
 
-	self.Maid:Give(track.InputBegan:Connect(function(input)
+	self.Maid:Give(hit.InputBegan:Connect(function(input)
 		if self.Disabled then return end
 		if input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.Touch then
@@ -1262,9 +1961,17 @@ function Dropdown.new(section, config: DropdownConfig)
 	self.Frame = frame
 	self.Open = false
 
+	local iconPad = 0
+	if config.Icon then
+		local ic = CreateIcon(frame, config.Icon, 16)
+		ic.Position = UDim2.fromOffset(0, 4)
+		iconPad = 22
+		self._IconLabel = ic
+	end
 	local title = CreateLabel(frame, config.Name or "Dropdown", 14, "Text")
-	title.Size = UDim2.new(1, 0, 0, 18)
-	title.Position = UDim2.fromOffset(0, 2)
+	title.Size = UDim2.new(1, -iconPad, 0, 18)
+	title.Position = UDim2.fromOffset(iconPad, 2)
+	self._TitleLabel = title
 
 	local trigger = Utility.Create("TextButton", {
 		Name = "Trigger",
@@ -1288,8 +1995,16 @@ function Dropdown.new(section, config: DropdownConfig)
 	display.Position = UDim2.fromOffset(10, 0)
 	display.TextTruncate = Enum.TextTruncate.AtEnd
 
-	local chevron = CreateIcon(trigger, "chevron", 14)
-	chevron.Position = UDim2.new(1, -22, 0.5, -7)
+	local chevron = Utility.Create("ImageLabel", {
+		BackgroundTransparency = 1,
+		Image = "rbxassetid://71880540200693",
+		Size = UDim2.fromOffset(14, 14),
+		Position = UDim2.new(1, -22, 0.5, -7),
+		ImageColor3 = tokens.TextSecondary,
+		ScaleType = Enum.ScaleType.Fit,
+		Parent = trigger,
+	})
+	RegisterTheme(chevron, "ImageColor3", "TextSecondary")
 
 	local listFrame = nil
 
@@ -1304,7 +2019,7 @@ function Dropdown.new(section, config: DropdownConfig)
 	local function closeList()
 		if not listFrame then return end
 		self.Open = false
-		QuickTween(chevron, { Rotation = 0 })
+		SpringTween(chevron, { Rotation = 0 }, 9)
 		listFrame:Destroy()
 		listFrame = nil
 		frame.Size = UDim2.new(1, 0, 0, 52)
@@ -1313,7 +2028,7 @@ function Dropdown.new(section, config: DropdownConfig)
 	local function openList()
 		if listFrame then return end
 		self.Open = true
-		QuickTween(chevron, { Rotation = 180 })
+		SpringTween(chevron, { Rotation = 180 }, 9)
 
 		local itemH = 28
 		local maxH = math.min(#self.Values * itemH + 8, 180)
@@ -1340,7 +2055,7 @@ function Dropdown.new(section, config: DropdownConfig)
 			BackgroundTransparency = 1,
 			Size = UDim2.fromScale(1, 1),
 			CanvasSize = UDim2.fromOffset(0, #self.Values * itemH),
-			ScrollBarThickness = 3,
+			ScrollBarThickness = 0,
 			BorderSizePixel = 0,
 			Parent = listFrame,
 		})
@@ -1451,19 +2166,29 @@ function Input.new(section, config: InputConfig)
 	local tokens = Library:GetTheme()
 	local frame = Utility.Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 52),
+		Size = UDim2.new(1, 0, 0, 36),
 		Parent = section.Content,
 	})
 	self.Frame = frame
 
+	local iconPad = 0
+	if config.Icon then
+		local ic = CreateIcon(frame, config.Icon, 16)
+		ic.Position = UDim2.fromOffset(0, 10)
+		iconPad = 22
+		self._IconLabel = ic
+	end
+
 	local title = CreateLabel(frame, config.Name or "Input", 14, "Text")
-	title.Size = UDim2.new(1, 0, 0, 18)
-	title.Position = UDim2.fromOffset(0, 2)
+	title.Size = UDim2.new(1, -(150 + iconPad), 1, 0)
+	title.Position = UDim2.fromOffset(iconPad, 0)
+	title.TextYAlignment = Enum.TextYAlignment.Center
+	self._TitleLabel = title
 
 	local box = Utility.Create("TextBox", {
-		BackgroundColor3 = tokens.SurfaceSecondary,
-		Size = UDim2.new(1, 0, 0, 28),
-		Position = UDim2.fromOffset(0, 22),
+		BackgroundColor3 = tokens.SurfaceTertiary,
+		Size = UDim2.fromOffset(140, 26),
+		Position = UDim2.new(1, -140, 0.5, -13),
 		Text = self.Value,
 		PlaceholderText = config.Placeholder or "",
 		PlaceholderColor3 = tokens.TextTertiary,
@@ -1474,20 +2199,30 @@ function Input.new(section, config: InputConfig)
 		ClearTextOnFocus = config.ClearTextOnFocus == true,
 		Parent = frame,
 	})
-	RegisterTheme(box, "BackgroundColor3", "SurfaceSecondary")
+	RegisterTheme(box, "BackgroundColor3", "SurfaceTertiary")
 	RegisterTheme(box, "TextColor3", "Text")
 	RegisterTheme(box, "PlaceholderColor3", "TextTertiary")
-	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = box })
-	Utility.Create("UIStroke", {
-		Color = tokens.Border,
-		Thickness = 1,
-		Parent = box,
-	})
+	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = box })
 	Utility.Create("UIPadding", {
 		PaddingLeft = UDim.new(0, 10),
 		PaddingRight = UDim.new(0, 10),
 		Parent = box,
 	})
+
+	self.Maid:Give(box.Focused:Connect(function()
+		local t = Library:GetTheme()
+		SpringTween(box, { BackgroundColor3 = t.SurfaceSecondary }, 10)
+	end))
+	self.Maid:Give(box.FocusLost:Connect(function()
+		local t = Library:GetTheme()
+		SpringTween(box, { BackgroundColor3 = t.SurfaceTertiary }, 10)
+		local text = box.Text
+		if config.Numeric then
+			text = tostring(tonumber(text) or self.Value)
+			box.Text = text
+		end
+		self:Set(text)
+	end))
 
 	function self:Set(value: string, silent: boolean?)
 		if self.Destroyed then return end
@@ -1503,17 +2238,8 @@ function Input.new(section, config: InputConfig)
 		end
 	end
 
-	self.Maid:Give(box.FocusLost:Connect(function()
-		local text = box.Text
-		if config.Numeric then
-			text = tostring(tonumber(text) or self.Value)
-			box.Text = text
-		end
-		self:Set(text)
-	end))
-
 	if config.Tooltip then
-		self.Maid:Give(BindTooltip(box, function() return config.Tooltip end))
+		self.Maid:Give(BindTooltip(frame, function() return config.Tooltip end))
 	end
 
 	if self.Disabled then
@@ -1581,12 +2307,12 @@ function Keybind.new(section, config: KeybindConfig)
 		end
 		ListeningKeybind = self
 		btn.Text = "..."
-		QuickTween(btn, { BackgroundColor3 = tokens.Accent })
+		SpringTween(btn, { BackgroundColor3 = tokens.Accent }, 10)
 	end))
 
 	function self:_CancelListen()
 		btn.Text = (self.Value and self.Value.Name) or "None"
-		QuickTween(btn, { BackgroundColor3 = tokens.SurfaceSecondary })
+		SpringTween(btn, { BackgroundColor3 = tokens.SurfaceSecondary }, 8)
 		if ListeningKeybind == self then
 			ListeningKeybind = nil
 		end
@@ -1647,41 +2373,168 @@ local Label = setmetatable({}, { __index = Component })
 Label.__index = Label
 
 function Label.new(section, config)
-	local self = Component.new(section, config)
+	local self = Component.new(section, config or {})
 	setmetatable(self, Label)
-	local frame = CreateRow(section.Content, 24)
+	config = config or {}
+	local text = config.Text or config.Name or config.Title or ""
+	local size = config.TextSize or 13
+	local token = config.Color or "TextSecondary"
+	if typeof(token) == "Color3" then
+		token = nil
+	end
+	local frame = CreateRow(section.Content, config.Height or (size + 10))
 	self.Frame = frame
-	local lbl = CreateLabel(frame, config.Name or config.Text or "", 13, "TextSecondary")
-	lbl.Size = UDim2.fromScale(1, 1)
+	local lbl = CreateLabel(frame, text, size, token or "TextSecondary")
+	lbl.Size = UDim2.new(1, -28, 1, 0)
+	lbl.RichText = config.RichText == true
+	if typeof(config.Color) == "Color3" then
+		lbl.TextColor3 = config.Color
+	end
+	if config.Bold then
+		lbl.Font = FONT_SEMIBOLD
+	end
 	self.Label = lbl
-	return self
-end
+	self._TitleLabel = lbl
 
-function Label:SetText(text)
-	if self.Label then self.Label.Text = text end
+	function self:SetText(t)
+		if self.Label then
+			self.Label.Text = t or ""
+		end
+	end
+
+	function self:SetColor(c)
+		if self.Label and typeof(c) == "Color3" then
+			self.Label.TextColor3 = c
+		end
+	end
+
+	AttachLinkButton(self, frame, false)
+
+	return self
 end
 
 local Paragraph = setmetatable({}, { __index = Component })
 Paragraph.__index = Paragraph
 
 function Paragraph.new(section, config)
-	local self = Component.new(section, config)
+	local self = Component.new(section, config or {})
 	setmetatable(self, Paragraph)
-	local text = config.Text or config.Name or ""
-	local bounds = Utility.GetTextBounds(text, FONT, 13, 280)
-	local h = math.max(28, bounds.Y + 8)
+	config = config or {}
+	local title = config.Title or config.Name
+	local text = config.Content or config.Text or ""
+	local rich = config.RichText ~= false
+	local textSize = config.TextSize or 13
+	local iconName = config.Icon
+
 	local frame = Utility.Create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, h),
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
 		Parent = section.Content,
 	})
 	self.Frame = frame
-	local lbl = CreateLabel(frame, text, 13, "TextSecondary")
-	lbl.Size = UDim2.fromScale(1, 1)
-	lbl.TextWrapped = true
-	lbl.TextYAlignment = Enum.TextYAlignment.Top
+
+	local iconPad = 0
+	if iconName and iconName ~= "" then
+		local ic = CreateIcon(frame, iconName, 16)
+		ic.Position = UDim2.fromOffset(0, 2)
+		ic.ImageColor3 = Library:GetTheme().TextSecondary
+		ic.ZIndex = 2
+		self.IconLabel = ic
+		iconPad = 22
+	end
+
+	local y = 0
+	if title then
+		local titleLbl = CreateLabel(frame, title, 14, "Text")
+		titleLbl.Size = UDim2.new(1, -iconPad, 0, 18)
+		titleLbl.Position = UDim2.fromOffset(iconPad, 0)
+		titleLbl.Font = FONT_SEMIBOLD
+		titleLbl.RichText = rich
+		titleLbl.TextTruncate = Enum.TextTruncate.None
+		titleLbl.TextWrapped = false
+		self.TitleLabel = titleLbl
+		y = 20
+	end
+
+	local firstLine, rest = text, nil
+	if not title then
+		local nl = string.find(text, "\n", 1, true)
+		if nl then
+			firstLine = string.sub(text, 1, nl - 1)
+			rest = string.sub(text, nl + 1)
+		end
+	end
+
+	local contentLbl = CreateLabel(frame, firstLine, textSize, "TextSecondary")
+	if title then
+		contentLbl.Position = UDim2.fromOffset(0, y)
+		contentLbl.Size = UDim2.new(1, 0, 0, 0)
+	else
+		contentLbl.Position = UDim2.fromOffset(iconPad, y)
+		contentLbl.Size = UDim2.new(1, -iconPad, 0, 0)
+	end
+	contentLbl.AutomaticSize = Enum.AutomaticSize.Y
+	contentLbl.TextWrapped = true
+	contentLbl.TextYAlignment = Enum.TextYAlignment.Top
+	contentLbl.TextTruncate = Enum.TextTruncate.None
+	contentLbl.RichText = rich
+	contentLbl.ClipsDescendants = false
+	self.Label = contentLbl
+	self.ContentLabel = contentLbl
+
+	if rest and rest ~= "" then
+		local restLbl = CreateLabel(frame, rest, textSize, "TextSecondary")
+		restLbl.Position = UDim2.fromOffset(0, y + 18)
+		restLbl.Size = UDim2.new(1, 0, 0, 0)
+		restLbl.AutomaticSize = Enum.AutomaticSize.Y
+		restLbl.TextWrapped = true
+		restLbl.TextYAlignment = Enum.TextYAlignment.Top
+		restLbl.TextTruncate = Enum.TextTruncate.None
+		restLbl.RichText = rich
+		restLbl.ClipsDescendants = false
+		self._RestLabel = restLbl
+
+		local function relayout()
+			local h = math.max(contentLbl.TextBounds.Y, contentLbl.AbsoluteSize.Y, textSize + 2)
+			restLbl.Position = UDim2.fromOffset(0, y + h + 2)
+		end
+		contentLbl:GetPropertyChangedSignal("TextBounds"):Connect(relayout)
+		contentLbl:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+		task.defer(relayout)
+	end
+
+	self._TitleLabel = self.TitleLabel or contentLbl
+
+	function self:SetText(t)
+		t = t or ""
+		if self._RestLabel and not self.TitleLabel then
+			local nl = string.find(t, "\n", 1, true)
+			if nl then
+				self.Label.Text = string.sub(t, 1, nl - 1)
+				self._RestLabel.Text = string.sub(t, nl + 1)
+			else
+				self.Label.Text = t
+				self._RestLabel.Text = ""
+			end
+		elseif self.Label then
+			self.Label.Text = t
+		end
+	end
+
+	function self:SetContent(t)
+		self:SetText(t)
+	end
+
+	function self:SetTitle(t)
+		if self.TitleLabel then
+			self.TitleLabel.Text = t or ""
+		end
+	end
+
 	return self
 end
+
 
 local Divider = setmetatable({}, { __index = Component })
 Divider.__index = Divider
@@ -1773,21 +2626,18 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 	self.Alpha = config.Alpha or 1
 	local h, s, v = self.Value:ToHSV()
 	self._H, self._S, self._V = h, s, v
+	self._DraftH, self._DraftS, self._DraftV = h, s, v
 	if config.Flag then
 		RegisterFlag(config.Flag, self, self.Value, config.Name, "ColorPicker")
 	end
 
 	local tokens = Library:GetTheme()
-	local frame = Utility.Create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 40),
-		Parent = section.Content,
-	})
+	local frame = CreateRow(section.Content, 40)
 	self.Frame = frame
-	self.Open = false
 
 	local title = CreateLabel(frame, config.Name or "Color", 14, "Text")
 	title.Size = UDim2.new(1, -44, 1, 0)
+	self._TitleLabel = title
 
 	local preview = Utility.Create("TextButton", {
 		BackgroundColor3 = self.Value,
@@ -1800,36 +2650,14 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = preview })
 	Utility.Create("UIStroke", { Color = tokens.Border, Thickness = 1, Parent = preview })
 	Utility.AddShadow(preview, { BlurRadius = 6, Transparency = 0.55, Offset = UDim2.fromOffset(0, 1) })
-
-	local panel = nil
-
-	local function closePanel()
-		if panel then
-			panel:Destroy()
-			panel = nil
-		end
-		self.Open = false
-		frame.Size = UDim2.new(1, 0, 0, 40)
-	end
-
-	local function applyHSV(silent)
-		local color = Color3.fromHSV(self._H, self._S, self._V)
-		self.Value = color
-		preview.BackgroundColor3 = color
-		if config.Flag and Library.Flags[config.Flag] then
-			Library.Flags[config.Flag].Value = color
-		end
-		if not silent then
-			Utility.SafeCallback(config.Callback, color, self.Alpha)
-			self.Changed:Fire(color)
-		end
-	end
+	self._Preview = preview
 
 	function self:Set(color: Color3, silent: boolean?)
 		if self.Destroyed then return end
 		self.Value = color
 		local nh, ns, nv = color:ToHSV()
 		self._H, self._S, self._V = nh, ns, nv
+		self._DraftH, self._DraftS, self._DraftV = nh, ns, nv
 		preview.BackgroundColor3 = color
 		if config.Flag and Library.Flags[config.Flag] then
 			Library.Flags[config.Flag].Value = color
@@ -1838,54 +2666,81 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 			Utility.SafeCallback(config.Callback, color, self.Alpha)
 			self.Changed:Fire(color)
 		end
-		if self.Open and panel then
-			closePanel()
-		end
 	end
 
-	local function openPanel()
-		if panel or self.Disabled then return end
-		self.Open = true
-		frame.Size = UDim2.new(1, 0, 0, 40 + 148)
+	function self:SetText(text: string)
+		if self._TitleLabel then
+			self._TitleLabel.Text = text or ""
+		end
+		self.Config.Name = text
+	end
 
-		panel = Utility.Create("Frame", {
-			BackgroundColor3 = tokens.SurfaceSecondary,
-			Size = UDim2.new(1, 0, 0, 140),
-			Position = UDim2.fromOffset(0, 40),
-			Parent = frame,
-			ZIndex = 20,
+	local function openModal()
+		if self.Disabled then return end
+		local window = section.Tab and section.Tab.Window
+		if not window or not window.Root then return end
+
+		self._DraftH, self._DraftS, self._DraftV = self._H, self._S, self._V
+		local tokens = Library:GetTheme()
+
+		local overlay = Utility.Create("Frame", {
+			Name = "ColorPickerModal",
+			BackgroundColor3 = tokens.Overlay,
+			BackgroundTransparency = 0.45,
+			Size = UDim2.fromScale(1, 1),
+			Parent = window.ScreenGui or window.Root,
+			ZIndex = 200,
 		})
-		RegisterTheme(panel, "BackgroundColor3", "SurfaceSecondary")
-		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = panel })
-		Utility.Create("UIStroke", { Color = tokens.Border, Thickness = 1, Parent = panel })
-		Utility.AddShadow(panel, {
-			BlurRadius = 16,
-			Transparency = 0.4,
-			Offset = UDim2.fromOffset(0, 4),
+
+		local modal = Utility.Create("Frame", {
+			BackgroundColor3 = tokens.Surface,
+			Size = UDim2.fromOffset(280, 280),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Parent = overlay,
+			ZIndex = 51,
+		})
+		RegisterTheme(modal, "BackgroundColor3", "Surface")
+		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 14), Parent = modal })
+		local modalScale = Utility.Create("UIScale", { Scale = 1.08, Parent = modal })
+		SpringTween(modalScale, { Scale = 1 }, 9)
+		overlay.BackgroundTransparency = 1
+		SpringTween(overlay, { BackgroundTransparency = 0.45 }, 8)
+		Utility.Create("UIStroke", { Color = tokens.Border, Thickness = 1, Parent = modal })
+		Utility.AddShadow(modal, {
+			BlurRadius = 24,
+			Transparency = 0.35,
+			Offset = UDim2.fromOffset(0, 8),
 		})
 		Utility.Create("UIPadding", {
-			PaddingTop = UDim.new(0, 10),
-			PaddingBottom = UDim.new(0, 10),
-			PaddingLeft = UDim.new(0, 10),
-			PaddingRight = UDim.new(0, 10),
-			Parent = panel,
+			PaddingTop = UDim.new(0, 16),
+			PaddingBottom = UDim.new(0, 14),
+			PaddingLeft = UDim.new(0, 16),
+			PaddingRight = UDim.new(0, 16),
+			Parent = modal,
 		})
 
+		local header = CreateLabel(modal, config.Name or "Color", 15, "Text")
+		header.Size = UDim2.new(1, 0, 0, 20)
+		header.Font = FONT_SEMIBOLD
+
 		local sat = Utility.Create("Frame", {
-			BackgroundColor3 = Color3.fromHSV(self._H, 1, 1),
-			Size = UDim2.fromOffset(120, 100),
-			Position = UDim2.fromOffset(0, 0),
-			Parent = panel,
-			ZIndex = 21,
+			BackgroundColor3 = Color3.fromHSV(self._DraftH, 1, 1),
+			Size = UDim2.fromOffset(160, 140),
+			Position = UDim2.fromOffset(0, 28),
+			Parent = modal,
+			ZIndex = 52,
+			Active = true,
 		})
-		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = sat })
+		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = sat })
 		local satWhite = Utility.Create("Frame", {
 			BackgroundColor3 = Color3.new(1, 1, 1),
 			Size = UDim2.fromScale(1, 1),
 			Parent = sat,
-			ZIndex = 21,
+			ZIndex = 52,
+			Active = false,
 		})
-		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = satWhite })
+		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = satWhite })
 		Utility.Create("UIGradient", {
 			Transparency = NumberSequence.new({
 				NumberSequenceKeypoint.new(0, 0),
@@ -1897,9 +2752,10 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 			BackgroundColor3 = Color3.new(0, 0, 0),
 			Size = UDim2.fromScale(1, 1),
 			Parent = sat,
-			ZIndex = 22,
+			ZIndex = 53,
+			Active = false,
 		})
-		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = satBlack })
+		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = satBlack })
 		Utility.Create("UIGradient", {
 			Rotation = 90,
 			Transparency = NumberSequence.new({
@@ -1909,24 +2765,37 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 			Parent = satBlack,
 		})
 
-		local cursor = Utility.Create("Frame", {
-			BackgroundColor3 = Color3.new(1, 1, 1),
-			Size = UDim2.fromOffset(10, 10),
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(self._S, 1 - self._V),
-			ZIndex = 23,
+		local satHit = Utility.Create("TextButton", {
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
+			Text = "",
+			ZIndex = 60,
+			AutoButtonColor = false,
 			Parent = sat,
 		})
+
+		local cursor = Utility.Create("Frame", {
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			Size = UDim2.fromOffset(12, 12),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(self._DraftS, 1 - self._DraftV),
+			ZIndex = 61,
+			Parent = sat,
+			Active = false,
+		})
+		pcall(function() cursor.Interactable = false end)
 		Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = cursor })
-		Utility.Create("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1, Parent = cursor })
+		Utility.Create("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1.5, Parent = cursor })
 
 		local hueBar = Utility.Create("Frame", {
-			Size = UDim2.fromOffset(16, 100),
-			Position = UDim2.fromOffset(128, 0),
-			Parent = panel,
-			ZIndex = 21,
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			Size = UDim2.fromOffset(18, 140),
+			Position = UDim2.fromOffset(170, 28),
+			Parent = modal,
+			ZIndex = 52,
+			Active = true,
 		})
-		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = hueBar })
+		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 5), Parent = hueBar })
 		Utility.Create("UIGradient", {
 			Rotation = 90,
 			Color = ColorSequence.new({
@@ -1941,126 +2810,201 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 			Parent = hueBar,
 		})
 
-		local hueCursor = Utility.Create("Frame", {
-			BackgroundColor3 = Color3.new(1, 1, 1),
-			Size = UDim2.new(1, 4, 0, 4),
-			Position = UDim2.new(0, -2, self._H, -2),
-			ZIndex = 22,
+		local hueHit = Utility.Create("TextButton", {
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
+			Text = "",
+			ZIndex = 60,
+			AutoButtonColor = false,
 			Parent = hueBar,
 		})
+
+		local hueCursor = Utility.Create("Frame", {
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			Size = UDim2.new(1, 8, 0, 4),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, 0, self._DraftH, 0),
+			ZIndex = 61,
+			Parent = hueBar,
+			Active = false,
+		})
+		pcall(function() hueCursor.Interactable = false end)
 		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 2), Parent = hueCursor })
 		Utility.Create("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1, Parent = hueCursor })
 
+		local previewBig = Utility.Create("Frame", {
+			BackgroundColor3 = Color3.fromHSV(self._DraftH, self._DraftS, self._DraftV),
+			Size = UDim2.fromOffset(48, 48),
+			Position = UDim2.fromOffset(200, 28),
+			Parent = modal,
+			ZIndex = 52,
+		})
+		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = previewBig })
+		Utility.AddShadow(previewBig, { BlurRadius = 10, Transparency = 0.45, Offset = UDim2.fromOffset(0, 3) })
+
 		local hexBox = Utility.Create("TextBox", {
-			BackgroundColor3 = tokens.SurfaceTertiary,
-			Size = UDim2.fromOffset(80, 22),
-			Position = UDim2.fromOffset(152, 0),
+			BackgroundColor3 = tokens.SurfaceSecondary,
+			Size = UDim2.fromOffset(48, 22),
+			Position = UDim2.fromOffset(200, 84),
 			Text = string.format("%02X%02X%02X",
 				math.floor(self.Value.R * 255),
 				math.floor(self.Value.G * 255),
 				math.floor(self.Value.B * 255)),
 			TextColor3 = tokens.Text,
 			Font = FONT,
-			TextSize = 12,
+			TextSize = 11,
 			ClearTextOnFocus = false,
-			Parent = panel,
-			ZIndex = 21,
+			Parent = modal,
+			ZIndex = 52,
 		})
-		RegisterTheme(hexBox, "BackgroundColor3", "SurfaceTertiary")
+		RegisterTheme(hexBox, "BackgroundColor3", "SurfaceSecondary")
 		RegisterTheme(hexBox, "TextColor3", "Text")
-		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = hexBox })
+		Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = hexBox })
 
-		local previewBig = Utility.Create("Frame", {
-			BackgroundColor3 = self.Value,
-			Size = UDim2.fromOffset(80, 70),
-			Position = UDim2.fromOffset(152, 30),
-			Parent = panel,
-			ZIndex = 21,
-		})
-		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = previewBig })
-		Utility.AddShadow(previewBig, { BlurRadius = 8, Transparency = 0.5, Offset = UDim2.fromOffset(0, 2) })
-
-		local function refreshDisplay()
-			sat.BackgroundColor3 = Color3.fromHSV(self._H, 1, 1)
-			cursor.Position = UDim2.fromScale(self._S, 1 - self._V)
-			hueCursor.Position = UDim2.new(0, -2, self._H, -2)
-			local c = Color3.fromHSV(self._H, self._S, self._V)
+		local function refreshDraft()
+			sat.BackgroundColor3 = Color3.fromHSV(self._DraftH, 1, 1)
+			cursor.Position = UDim2.fromScale(self._DraftS, 1 - self._DraftV)
+			hueCursor.Position = UDim2.new(0.5, 0, self._DraftH, 0)
+			local c = Color3.fromHSV(self._DraftH, self._DraftS, self._DraftV)
 			previewBig.BackgroundColor3 = c
-			preview.BackgroundColor3 = c
 			hexBox.Text = string.format("%02X%02X%02X",
 				math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
 		end
 
-		local draggingSV, draggingH = false, false
+		local conns = {}
 
-		self.Maid:Give(sat.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch then
-				draggingSV = true
-				local rel = input.Position - sat.AbsolutePosition
-				self._S = Utility.Clamp(rel.X / sat.AbsoluteSize.X, 0, 1)
-				self._V = 1 - Utility.Clamp(rel.Y / sat.AbsoluteSize.Y, 0, 1)
-				refreshDisplay()
-				applyHSV()
-			end
-		end))
-		self.Maid:Give(hueBar.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch then
-				draggingH = true
-				local rel = input.Position - hueBar.AbsolutePosition
-				self._H = Utility.Clamp(rel.Y / hueBar.AbsoluteSize.Y, 0, 1)
-				refreshDisplay()
-				applyHSV()
-			end
-		end))
-		self.Maid:Give(UserInputService.InputChanged:Connect(function(input)
-			if input.UserInputType ~= Enum.UserInputType.MouseMovement
+		local function updateSV()
+			local ap = sat.AbsolutePosition
+			local as = sat.AbsoluteSize
+			if as.X < 1 or as.Y < 1 then return end
+			local m = UserInputService:GetMouseLocation()
+			local x = math.clamp(m.X, ap.X, ap.X + as.X)
+			local y = math.clamp(m.Y, ap.Y, ap.Y + as.Y)
+			self._DraftS = (x - ap.X) / as.X
+			self._DraftV = 1 - ((y - ap.Y) / as.Y)
+			refreshDraft()
+		end
+
+		local function updateH()
+			local ap = hueBar.AbsolutePosition
+			local as = hueBar.AbsoluteSize
+			if as.Y < 1 then return end
+			local m = UserInputService:GetMouseLocation()
+			local y = math.clamp(m.Y, ap.Y, ap.Y + as.Y)
+			self._DraftH = (y - ap.Y) / as.Y
+			refreshDraft()
+		end
+
+		table.insert(conns, satHit.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1
 				and input.UserInputType ~= Enum.UserInputType.Touch then
 				return
 			end
-			if draggingSV then
-				local rel = input.Position - sat.AbsolutePosition
-				self._S = Utility.Clamp(rel.X / sat.AbsoluteSize.X, 0, 1)
-				self._V = 1 - Utility.Clamp(rel.Y / sat.AbsoluteSize.Y, 0, 1)
-				refreshDisplay()
-				applyHSV()
-			elseif draggingH then
-				local rel = input.Position - hueBar.AbsolutePosition
-				self._H = Utility.Clamp(rel.Y / hueBar.AbsoluteSize.Y, 0, 1)
-				refreshDisplay()
-				applyHSV()
-			end
+			updateSV()
+			local move
+			move = RunService.RenderStepped:Connect(function()
+				if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+					or #UserInputService:GetTouches() > 0 then
+					updateSV()
+				else
+					move:Disconnect()
+				end
+			end)
+			table.insert(conns, move)
 		end))
-		self.Maid:Give(UserInputService.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch then
-				draggingSV = false
-				draggingH = false
+
+		table.insert(conns, hueHit.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1
+				and input.UserInputType ~= Enum.UserInputType.Touch then
+				return
 			end
+			updateH()
+			local move
+			move = RunService.RenderStepped:Connect(function()
+				if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+					or #UserInputService:GetTouches() > 0 then
+					updateH()
+				else
+					move:Disconnect()
+				end
+			end)
+			table.insert(conns, move)
 		end))
-		self.Maid:Give(hexBox.FocusLost:Connect(function()
+		table.insert(conns, hexBox.FocusLost:Connect(function()
 			local hex = hexBox.Text:gsub("#", "")
 			if #hex == 6 then
 				local r = tonumber(hex:sub(1, 2), 16)
 				local g = tonumber(hex:sub(3, 4), 16)
 				local b = tonumber(hex:sub(5, 6), 16)
 				if r and g and b then
-					self:Set(Color3.fromRGB(r, g, b))
-					local nh, ns, nv = self.Value:ToHSV()
-					self._H, self._S, self._V = nh, ns, nv
-					refreshDisplay()
+					local nh, ns, nv = Color3.fromRGB(r, g, b):ToHSV()
+					self._DraftH, self._DraftS, self._DraftV = nh, ns, nv
+					refreshDraft()
 				end
 			end
 		end))
+
+		local btnRow = Utility.Create("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, 34),
+			Position = UDim2.fromOffset(0, 180),
+			Parent = modal,
+			ZIndex = 52,
+		})
+		Utility.Create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Right,
+			Padding = UDim.new(0, 10),
+			Parent = btnRow,
+		})
+
+		local function cleanup()
+			for _, c in ipairs(conns) do
+				c:Disconnect()
+			end
+			overlay:Destroy()
+		end
+
+		local cancelBtn = Utility.Create("TextButton", {
+			BackgroundColor3 = tokens.SurfaceSecondary,
+			Size = UDim2.fromOffset(90, 32),
+			Text = "Cancel",
+			TextColor3 = tokens.Text,
+			Font = FONT_SEMIBOLD,
+			TextSize = 13,
+			AutoButtonColor = false,
+			Parent = btnRow,
+			ZIndex = 53,
+		})
+		RegisterTheme(cancelBtn, "BackgroundColor3", "SurfaceSecondary")
+		RegisterTheme(cancelBtn, "TextColor3", "Text")
+		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = cancelBtn })
+		cancelBtn.Activated:Connect(function()
+			cleanup()
+		end)
+
+		local confirmBtn = Utility.Create("TextButton", {
+			BackgroundColor3 = tokens.Accent,
+			Size = UDim2.fromOffset(90, 32),
+			Text = "Confirm",
+			TextColor3 = Color3.new(1, 1, 1),
+			Font = FONT_SEMIBOLD,
+			TextSize = 13,
+			AutoButtonColor = false,
+			Parent = btnRow,
+			ZIndex = 53,
+		})
+		RegisterTheme(confirmBtn, "BackgroundColor3", "Accent")
+		Utility.Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = confirmBtn })
+		confirmBtn.Activated:Connect(function()
+			local color = Color3.fromHSV(self._DraftH, self._DraftS, self._DraftV)
+			self:Set(color)
+			cleanup()
+		end)
 	end
 
 	self.Maid:Give(preview.Activated:Connect(function()
-		if self.Open then
-			closePanel()
-		else
-			openPanel()
-		end
+		openModal()
 	end))
 
 	if config.Tooltip then
@@ -2074,63 +3018,60 @@ function ColorPicker.new(section, config: ColorPickerConfig)
 	return self
 end
 
-local ProgressBar = setmetatable({}, { __index = Component })
-ProgressBar.__index = ProgressBar
 
-function ProgressBar.new(section, config)
-	local self = Component.new(section, config)
-	setmetatable(self, ProgressBar)
-	self.Value = config.Default or 0
+
+local Header = setmetatable({}, { __index = Component })
+Header.__index = Header
+
+function Header.new(parentContent, config)
+	config = config or {}
+	if type(config) == "string" then
+		config = { Text = config }
+	end
+	local self = setmetatable({}, Header)
+	self.Config = config
+	self.Maid = Maid.new()
+	self.Destroyed = false
+	self.Components = {}
+
+	local text = config.Text or config.Name or config.Title or "Header"
 	local tokens = Library:GetTheme()
-
 	local frame = Utility.Create("Frame", {
+		Name = "Header",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 40),
-		Parent = section.Content,
+		Size = UDim2.new(1, 0, 0, config.Height or 28),
+		Parent = parentContent,
 	})
 	self.Frame = frame
 
-	local title = CreateLabel(frame, config.Name or "Progress", 13, "Text")
-	title.Size = UDim2.new(1, -50, 0, 16)
-
-	local pctLbl = CreateLabel(frame, "0%", 12, "TextSecondary")
-	pctLbl.Size = UDim2.fromOffset(40, 16)
-	pctLbl.Position = UDim2.new(1, -40, 0, 0)
-	pctLbl.TextXAlignment = Enum.TextXAlignment.Right
-
-	local track = Utility.Create("Frame", {
-		BackgroundColor3 = tokens.SurfaceTertiary,
-		Size = UDim2.new(1, 0, 0, 8),
-		Position = UDim2.fromOffset(0, 24),
-		Parent = frame,
-	})
-	RegisterTheme(track, "BackgroundColor3", "SurfaceTertiary")
-	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = track })
-
-	local fill = Utility.Create("Frame", {
-		BackgroundColor3 = tokens.Accent,
-		Size = UDim2.new(0, 0, 1, 0),
-		Parent = track,
-	})
-	RegisterTheme(fill, "BackgroundColor3", "Accent")
-	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = fill })
-
-	function self:Set(value: number, silent: boolean?)
-		value = Utility.Clamp(value, 0, 1)
-		self.Value = value
-		QuickTween(fill, { Size = UDim2.new(value, 0, 1, 0) })
-		pctLbl.Text = math.floor(value * 100) .. "%"
-		if not silent then
-			self.Changed:Fire(value)
-		end
+	local pad = 0
+	if config.Icon then
+		local ic = CreateIcon(frame, config.Icon, 16)
+		ic.Position = UDim2.fromOffset(0, 6)
+		ic.ImageColor3 = tokens.Text
+		RegisterTheme(ic, "ImageColor3", "Text")
+		self.IconLabel = ic
+		pad = 22
 	end
 
-	self:Set(self.Value, true)
+	local lbl = CreateLabel(frame, text, config.TextSize or 15, "Text")
+	lbl.Size = UDim2.new(1, -pad, 1, 0)
+	lbl.Position = UDim2.fromOffset(pad, 0)
+	lbl.Font = FONT_SEMIBOLD
+	lbl.RichText = config.RichText == true
+	self.Label = lbl
+	self._TitleLabel = lbl
+
+	function self:SetText(t)
+		if self.Label then self.Label.Text = t or "" end
+	end
+
 	return self
 end
 
 
-local Section = {}
+
+Section = {}
 Section.__index = Section
 
 function Section.new(tab, config: SectionConfig)
@@ -2204,10 +3145,23 @@ function Section.new(tab, config: SectionConfig)
 		Parent = container,
 	})
 
+	self.Icon = config.Icon
+	local iconPad = 0
+	if self.Icon then
+		local secIcon = CreateIcon(headerBtn, self.Icon, 15)
+		secIcon.Position = UDim2.fromOffset(0, 3)
+		secIcon.ImageColor3 = tokens.Text
+		RegisterTheme(secIcon, "ImageColor3", "Text")
+		self.IconLabel = secIcon
+		iconPad = 22
+	end
+
 	local header = CreateLabel(headerBtn, self.Name, 13, "TextSecondary")
-	header.Size = UDim2.new(1, collapseEnabled and -24 or 0, 1, 0)
+	header.Size = UDim2.new(1, -(iconPad + (collapseEnabled and 24 or 0)), 1, 0)
+	header.Position = UDim2.fromOffset(iconPad, 0)
 	header.Font = FONT_SEMIBOLD
 	header.TextXAlignment = Enum.TextXAlignment.Left
+	self.Header = header
 
 	local chevron
 	if collapseEnabled then
@@ -2226,9 +3180,14 @@ function Section.new(tab, config: SectionConfig)
 		Visible = not startCollapsed,
 		Parent = container,
 	})
+	local contentPad = 6
+	local win = tab.Window
+	if win and win.ElementsRow and win.ElementsRow.Enabled then
+		contentPad = 0
+	end
 	Utility.Create("UIListLayout", {
 		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 6),
+		Padding = UDim.new(0, contentPad),
 		Parent = contentHolder,
 	})
 
@@ -2248,7 +3207,28 @@ function Section.new(tab, config: SectionConfig)
 		self.Collapsed = collapsed
 		contentHolder.Visible = not collapsed
 		if chevron then
-			QuickTween(chevron, { Rotation = collapsed and -90 or 0 })
+			SpringTween(chevron, { Rotation = collapsed and -90 or 0 }, 9)
+		end
+	end
+
+	function self:ToggleCollapse()
+		self:SetCollapsed(not self.Collapsed)
+	end
+
+	function self:SetName(name: string)
+		self.Name = name or self.Name
+		if self.Header then
+			self.Header.Text = self.Name
+		end
+	end
+
+	function self:GetName()
+		return self.Name
+	end
+
+	function self:SetVisible(v: boolean)
+		if self.Frame then
+			self.Frame.Visible = v
 		end
 	end
 
@@ -2259,9 +3239,76 @@ function Section.new(tab, config: SectionConfig)
 	return self
 end
 
+local function InsertElementRowDivider(section)
+	local tab = section.Tab
+	local window = tab and tab.Window
+	local er = window and window.ElementsRow
+	if not er or er.Enabled ~= true then
+		return
+	end
+	if not section.Content then
+		return
+	end
+	if #(section.Components or {}) == 0 then
+		return
+	end
+
+	local tokens = Library:GetTheme()
+	local dtype = string.lower(tostring(er.Type or "thin"))
+	local height = (dtype == "thick") and 10 or 1
+	local holder = Utility.Create("Frame", {
+		Name = "ElementRow",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, height),
+		Parent = section.Content,
+	})
+
+	if dtype == "fade" then
+		local line = Utility.Create("Frame", {
+			BackgroundColor3 = tokens.Border,
+			Size = UDim2.new(1, 0, 0, 1),
+			Position = UDim2.fromOffset(0, 0),
+			BorderSizePixel = 0,
+			Parent = holder,
+		})
+		RegisterTheme(line, "BackgroundColor3", "Border")
+		local g = Utility.Create("UIGradient", {
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1),
+				NumberSequenceKeypoint.new(0.15, 0.55),
+				NumberSequenceKeypoint.new(0.5, 0.35),
+				NumberSequenceKeypoint.new(0.85, 0.55),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+			Parent = line,
+		})
+	elseif dtype == "thick" then
+		local line = Utility.Create("Frame", {
+			BackgroundColor3 = tokens.Border,
+			Size = UDim2.new(1, 0, 0, 1),
+			Position = UDim2.new(0, 0, 0.5, 0),
+			BorderSizePixel = 0,
+			Parent = holder,
+		})
+		RegisterTheme(line, "BackgroundColor3", "Border")
+		line.BackgroundTransparency = 0.25
+	else
+		local line = Utility.Create("Frame", {
+			BackgroundColor3 = tokens.Border,
+			Size = UDim2.new(1, 0, 0, 1),
+			BorderSizePixel = 0,
+			BackgroundTransparency = 0.45,
+			Parent = holder,
+		})
+		RegisterTheme(line, "BackgroundColor3", "Border")
+	end
+end
+
+
 local function ResetButtonRow(section)
 	section._ButtonRow = nil
 	section._ButtonRowCount = 0
+	section._ButtonSlots = nil
 end
 
 function Section:AddButton(config)
@@ -2269,6 +3316,8 @@ function Section:AddButton(config)
 		config = { Name = config }
 	end
 	config = config or {}
+	ResetButtonRow(self)
+	InsertElementRowDivider(self)
 	local c = Button.new(self, config)
 	table.insert(self.Components, c)
 	return c
@@ -2276,6 +3325,7 @@ end
 
 function Section:AddToggle(config)
 	ResetButtonRow(self)
+	InsertElementRowDivider(self)
 	local c = Toggle.new(self, config)
 	table.insert(self.Components, c)
 	return c
@@ -2283,6 +3333,7 @@ end
 
 function Section:AddSlider(config)
 	ResetButtonRow(self)
+	InsertElementRowDivider(self)
 	local c = Slider.new(self, config)
 	table.insert(self.Components, c)
 	return c
@@ -2290,6 +3341,7 @@ end
 
 function Section:AddDropdown(config)
 	ResetButtonRow(self)
+	InsertElementRowDivider(self)
 	local c = Dropdown.new(self, config)
 	table.insert(self.Components, c)
 	return c
@@ -2303,6 +3355,7 @@ end
 
 function Section:AddInput(config)
 	ResetButtonRow(self)
+	InsertElementRowDivider(self)
 	local c = Input.new(self, config)
 	table.insert(self.Components, c)
 	return c
@@ -2310,33 +3363,55 @@ end
 
 function Section:AddKeybind(config)
 	ResetButtonRow(self)
+	InsertElementRowDivider(self)
 	local c = Keybind.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddLabel(config)
+	if type(config) == "string" then
+		config = { Text = config }
+	end
 	ResetButtonRow(self)
-	local c = Label.new(self, config)
+	InsertElementRowDivider(self)
+	local c = Label.new(self, config or {})
+	table.insert(self.Components, c)
+	return c
+end
+
+function Section:AddHeader(config)
+	if type(config) == "string" then
+		config = { Text = config }
+	end
+	ResetButtonRow(self)
+	InsertElementRowDivider(self)
+	local c = Header.new(self.Content, config or {})
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddParagraph(config)
+	if type(config) == "string" then
+		config = { Text = config, RichText = true }
+	end
 	ResetButtonRow(self)
-	local c = Paragraph.new(self, config)
+	InsertElementRowDivider(self)
+	local c = Paragraph.new(self, config or {})
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddDivider(opts)
 	ResetButtonRow(self)
+	InsertElementRowDivider(self)
 	local c = Divider.new(self, type(opts) == "table" and opts or {})
 	table.insert(self.Components, c)
 	return c
 end
 
 function Section:AddSpace(sizeOrOpts)
+	InsertElementRowDivider(self)
 	ResetButtonRow(self)
 	local opts = type(sizeOrOpts) == "number" and { Size = sizeOrOpts } or (sizeOrOpts or {})
 	local c = Space.new(self, opts)
@@ -2346,14 +3421,8 @@ end
 
 function Section:AddColorPicker(config)
 	ResetButtonRow(self)
+	InsertElementRowDivider(self)
 	local c = ColorPicker.new(self, config)
-	table.insert(self.Components, c)
-	return c
-end
-
-function Section:AddProgressBar(config)
-	ResetButtonRow(self)
-	local c = ProgressBar.new(self, config)
 	table.insert(self.Components, c)
 	return c
 end
@@ -2371,7 +3440,7 @@ function Section:Destroy()
 end
 
 
-local Tab = {}
+Tab = {}
 Tab.__index = Tab
 
 function Tab.new(window, config)
@@ -2395,7 +3464,7 @@ function Tab.new(window, config)
 		Position = UDim2.fromOffset(compact and 3 or 8, 0),
 		Text = "",
 		AutoButtonColor = false,
-		Parent = window.SidebarList,
+		Parent = config.SidebarParent or window.SidebarList,
 	})
 	self.Button = btn
 
@@ -2434,7 +3503,7 @@ function Tab.new(window, config)
 		Size = UDim2.fromScale(1, 1),
 		CanvasSize = UDim2.fromOffset(0, 0),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 4,
+		ScrollBarThickness = 0,
 		ScrollBarImageColor3 = tokens.Border,
 		BorderSizePixel = 0,
 		Visible = false,
@@ -2526,12 +3595,12 @@ function Tab.new(window, config)
 
 	self.Maid:Give(btn.MouseEnter:Connect(function()
 		if not self.Active then
-			QuickTween(lbl, { TextColor3 = tokens.Text })
+			SpringTween(lbl, { TextColor3 = tokens.Text }, 10)
 		end
 	end))
 	self.Maid:Give(btn.MouseLeave:Connect(function()
 		if not self.Active then
-			QuickTween(lbl, { TextColor3 = tokens.TextSecondary })
+			SpringTween(lbl, { TextColor3 = tokens.TextSecondary }, 10)
 		end
 	end))
 
@@ -2546,17 +3615,32 @@ end
 function Tab:SetActive(active: boolean)
 	self.Active = active
 	local tokens = Library:GetTheme()
-	self.Page.Visible = active
-	self.AccentBar.Visible = active
-	self.Label.TextColor3 = active and tokens.Text or tokens.TextSecondary
-	if self.IconLabel then
-		self.IconLabel.ImageColor3 = active and tokens.Accent or tokens.TextSecondary
+	if self.Page then
+		self.Page.Visible = active
+		if active then
+			self.Page.CanvasPosition = Vector2.zero
+		end
 	end
-	if active then
-		self.Button.BackgroundTransparency = 0.92
-		self.Button.BackgroundColor3 = tokens.SurfaceSecondary
-	else
-		self.Button.BackgroundTransparency = 1
+	if self.AccentBar then
+		self.AccentBar.Visible = active
+		if active then
+			self.AccentBar.Size = UDim2.fromOffset(3, 8)
+			SpringTween(self.AccentBar, { Size = UDim2.fromOffset(3, 20) }, 10)
+		end
+	end
+	if self.Label then
+		SpringTween(self.Label, { TextColor3 = active and tokens.Text or tokens.TextSecondary }, 10)
+	end
+	if self.IconLabel then
+		SpringTween(self.IconLabel, { ImageColor3 = active and tokens.Accent or tokens.TextSecondary }, 10)
+	end
+	if self.Button then
+		if active then
+			self.Button.BackgroundColor3 = tokens.SurfaceSecondary
+			SpringTween(self.Button, { BackgroundTransparency = 0.92 }, 10)
+		else
+			SpringTween(self.Button, { BackgroundTransparency = 1 }, 10)
+		end
 	end
 end
 
@@ -2564,6 +3648,38 @@ function Tab:AddSection(config)
 	local sec = Section.new(self, config or {})
 	table.insert(self.Sections, sec)
 	return sec
+end
+
+function Tab:SetName(name: string)
+	self.Name = name or self.Name
+	if self.Label then
+		self.Label.Text = self.Name
+	end
+end
+
+function Tab:SetIcon(icon: string)
+	self.Icon = icon
+	if self.IconLabel then
+		self.IconLabel.Image = ResolveIcon(icon) or ""
+	end
+end
+
+function Tab:SetVisible(v: boolean)
+	if self.Button then
+		self.Button.Visible = v
+	end
+	if not v and self.Active and self.Window then
+		for _, t in ipairs(self.Window.Tabs) do
+			if t ~= self and t.Button and t.Button.Visible then
+				self.Window:SelectTab(t)
+				break
+			end
+		end
+	end
+end
+
+function Tab:GetName()
+	return self.Name
 end
 
 
@@ -2607,6 +3723,14 @@ function Tab:AddLabel(config)
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddLabel(config)
 end
+
+function Tab:AddHeader(config)
+	if type(config) == "string" then
+		config = { Text = config }
+	end
+	local c = Header.new(self.Content, config or {})
+	return c
+end
 function Tab:AddParagraph(config)
 	local sec = self.Sections[#self.Sections]
 	if not sec then sec = self:AddSection({ Name = "General" }) end
@@ -2626,12 +3750,6 @@ function Tab:AddColorPicker(config)
 	if not sec then sec = self:AddSection({ Name = "General" }) end
 	return sec:AddColorPicker(config)
 end
-function Tab:AddProgressBar(config)
-	local sec = self.Sections[#self.Sections]
-	if not sec then sec = self:AddSection({ Name = "General" }) end
-	return sec:AddProgressBar(config)
-end
-
 function Tab:Destroy()
 	if self.Destroyed then return end
 	self.Destroyed = true
@@ -2710,13 +3828,13 @@ local function CreateNotification(config)
 	end
 
 	gui.Position = UDim2.new(1, 40, 0, 20)
-	QuickTween(gui, { Position = UDim2.new(1, -20, 0, 20 + (#Library.Notifications * 90)) })
+	SpringTween(gui, { Position = UDim2.new(1, -20, 0, 20 + (#Library.Notifications * 90)) }, 7)
 
 	table.insert(Library.Notifications, gui)
 
 	task.delay(duration, function()
 		if gui and gui.Parent then
-			local tw = QuickTween(gui, { Position = UDim2.new(1, 40, 0, gui.Position.Y.Offset) })
+			local tw = SpringTween(gui, { Position = UDim2.new(1, 40, 0, gui.Position.Y.Offset) }, 7)
 			tw.Completed:Wait()
 			gui:Destroy()
 			local idx = table.find(Library.Notifications, gui)
@@ -2827,7 +3945,7 @@ local function CreateModal(window, config)
 end
 
 
-local Window = {}
+Window = {}
 Window.__index = Window
 
 function Window.new(library, config: WindowConfig)
@@ -2841,6 +3959,16 @@ function Window.new(library, config: WindowConfig)
 	self.DPI = 1
 	self.SearchEnabled = false
 	self.CompactTab = config.CompactTab == true
+	local er = config.ElementsRow
+	if type(er) == "boolean" then
+		er = { Enabled = er, Type = "thin" }
+	elseif type(er) ~= "table" then
+		er = { Enabled = false, Type = "thin" }
+	end
+	self.ElementsRow = {
+		Enabled = er.Enabled == true,
+		Type = tostring(er.Type or "thin"):lower(),
+	}
 	self.CurrentTab = nil
 
 	local tokens = library:GetTheme()
@@ -2854,8 +3982,13 @@ function Window.new(library, config: WindowConfig)
 		IgnoreGuiInset = true,
 		DisplayOrder = 100,
 	})
-	pcall(protectgui, screenGui)
-	screenGui.Parent = gethui()
+	SafeProtect(screenGui)
+	local uiParent = SafeParent()
+	if not uiParent then
+		warn("[Library] Failed to find UI parent (PlayerGui/CoreGui)")
+		return nil
+	end
+	screenGui.Parent = uiParent
 	self.ScreenGui = screenGui
 
 	local uiScale = Utility.Create("UIScale", {
@@ -2902,8 +4035,11 @@ function Window.new(library, config: WindowConfig)
 		Name = "Header",
 		BackgroundColor3 = tokens.Surface,
 		Size = UDim2.new(1, 0, 0, HEADER_HEIGHT),
+		BorderSizePixel = 0,
 		Parent = surface,
 	})
+	
+	Utility.Create("UICorner", { TopLeftRadius = UDim.new(0, 14), TopRightRadius = UDim.new(0, 14), BottomLeftRadius = UDim.new(0, 0), BottomRightRadius = UDim.new(0, 0), Parent = header })
 	RegisterTheme(header, "BackgroundColor3", "Surface")
 	self.Header = header
 
@@ -2944,16 +4080,26 @@ function Window.new(library, config: WindowConfig)
 	makeLight(Color3.fromRGB(40, 200, 64), function() end)
 
 
-	local titleLbl = CreateLabel(header, config.Title or "Window", 15, "Text")
-	titleLbl.Size = UDim2.new(1, -180, 0, 20)
-	titleLbl.Position = UDim2.fromOffset(90, 8)
+	local titleX = 90
+	if config.Icon then
+		local winIcon = CreateIcon(header, config.Icon, 20)
+		winIcon.Position = UDim2.fromOffset(90, 14)
+		winIcon.ImageColor3 = tokens.Text
+		RegisterTheme(winIcon, "ImageColor3", "Text")
+		self.IconLabel = winIcon
+		titleX = 118
+	end
+
+	local titleLbl = CreateLabel(header, config.Title or "Window", 17, "Text")
+	titleLbl.Size = UDim2.new(1, -(titleX + 90), 0, 22)
+	titleLbl.Position = UDim2.fromOffset(titleX, 6)
 	titleLbl.Font = FONT_SEMIBOLD
 	titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 	self.TitleLabel = titleLbl
 
-	local subLbl = CreateLabel(header, config.Subtitle or "", 11, "TextTertiary")
-	subLbl.Size = UDim2.new(1, -180, 0, 14)
-	subLbl.Position = UDim2.fromOffset(90, 26)
+	local subLbl = CreateLabel(header, config.Subtitle or "", 12, "TextTertiary")
+	subLbl.Size = UDim2.new(1, -(titleX + 90), 0, 16)
+	subLbl.Position = UDim2.fromOffset(titleX, 26)
 	self.SubtitleLabel = subLbl
 
 	local searchBox = Utility.Create("TextBox", {
@@ -2972,7 +4118,7 @@ function Window.new(library, config: WindowConfig)
 	})
 	RegisterTheme(searchBox, "BackgroundColor3", "SurfaceSecondary")
 	RegisterTheme(searchBox, "TextColor3", "Text")
-	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = searchBox })
+	Utility.Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = searchBox })
 	Utility.Create("UIPadding", {
 		PaddingLeft = UDim.new(0, 8),
 		PaddingRight = UDim.new(0, 8),
@@ -2980,6 +4126,25 @@ function Window.new(library, config: WindowConfig)
 	})
 	self.SearchBox = searchBox
 
+	local topBar = Utility.Create("Frame", {
+		Name = "TopBarButtons",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(0, 0, 0, 28),
+		AutomaticSize = Enum.AutomaticSize.X,
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -170, 0.5, 0),
+		Parent = header,
+	})
+	Utility.Create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 6),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = topBar,
+	})
+	self.TopBarButtons = topBar
+	self._TopBarButtonCount = 0
 
 	local body = Utility.Create("Frame", {
 		Name = "Body",
@@ -2995,18 +4160,13 @@ function Window.new(library, config: WindowConfig)
 		Name = "Sidebar",
 		BackgroundColor3 = tokens.Surface,
 		Size = UDim2.new(0, sidebarW, 1, 0),
+		BorderSizePixel = 0,
 		Parent = body,
 	})
+	Utility.Create("UICorner", { TopLeftRadius = UDim.new(0, 14), TopRightRadius = UDim.new(0, 0), BottomLeftRadius = UDim.new(0, 14), BottomRightRadius = UDim.new(0, 0), Parent = sidebar })
 	RegisterTheme(sidebar, "BackgroundColor3", "Surface")
 	self.Sidebar = sidebar
 
-	local sideStroke = Utility.Create("Frame", {
-		BackgroundColor3 = tokens.Border,
-		Size = UDim2.new(0, 1, 1, 0),
-		Position = UDim2.new(1, -1, 0, 0),
-		Parent = sidebar,
-	})
-	RegisterTheme(sideStroke, "BackgroundColor3", "Border")
 
 	local sideList = Utility.Create("ScrollingFrame", {
 		BackgroundTransparency = 1,
@@ -3014,7 +4174,7 @@ function Window.new(library, config: WindowConfig)
 		Position = UDim2.fromOffset(0, 8),
 		CanvasSize = UDim2.fromOffset(0, 0),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 3,
+		ScrollBarThickness = 0,
 		BorderSizePixel = 0,
 		Parent = sidebar,
 	})
@@ -3130,20 +4290,155 @@ function Window.new(library, config: WindowConfig)
 	return self
 end
 
+function Window:AddTabGroup(config)
+	config = config or {}
+	local tokens = Library:GetTheme()
+	local collapseCfg = config.Collapse or {}
+	local collapseEnabled = collapseCfg.Enabled == true
+	local startCollapsed = collapseCfg.Default == true
+	local center = config.Center == true
+
+	local group = {
+		Window = self,
+		Title = config.Title or "Group",
+		Tabs = {},
+		Collapsed = startCollapsed,
+		Maid = Maid.new(),
+	}
+
+	local container = Utility.Create("Frame", {
+		Name = "TabGroup_" .. group.Title,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = self.SidebarList,
+	})
+	Utility.Create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 2),
+		Parent = container,
+	})
+
+	local header = Utility.Create("TextButton", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -12, 0, 32),
+		Position = UDim2.fromOffset(6, 0),
+		Text = "",
+		AutoButtonColor = false,
+		LayoutOrder = 0,
+		Parent = container,
+	})
+
+	local titleLbl = CreateLabel(header, group.Title, 14, "Text")
+	titleLbl.Size = UDim2.new(1, collapseEnabled and -20 or 0, 1, 0)
+	titleLbl.Font = FONT_SEMIBOLD
+	titleLbl.TextColor3 = tokens.Text
+	titleLbl.TextXAlignment = center and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
+	if center then
+		titleLbl.Position = UDim2.fromOffset(0, 0)
+	else
+		titleLbl.Position = UDim2.fromOffset(8, 0)
+	end
+
+	local chevron
+	if collapseEnabled then
+		chevron = CreateIcon(header, "chevron", 12)
+		chevron.Position = UDim2.new(1, -14, 0.5, -6)
+		chevron.Rotation = startCollapsed and -90 or 0
+	end
+
+	local tabsHolder = Utility.Create("Frame", {
+		Name = "TabsHolder",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Visible = not startCollapsed,
+		LayoutOrder = 1,
+		Parent = container,
+	})
+	Utility.Create("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 2),
+		Parent = tabsHolder,
+	})
+
+	if config.Tooltip then
+		group.Maid:Give(BindTooltip(header, function() return config.Tooltip end))
+	end
+
+	if collapseEnabled then
+		group.Maid:Give(header.Activated:Connect(function()
+			group.Collapsed = not group.Collapsed
+			tabsHolder.Visible = not group.Collapsed
+			if chevron then
+				QuickTween(chevron, { Rotation = group.Collapsed and -90 or 0 })
+			end
+		end))
+	end
+
+	function group:AddTab(tabConfig)
+		tabConfig = tabConfig or {}
+		tabConfig.SidebarParent = tabsHolder
+		local tab = Tab.new(self.Window, tabConfig)
+		table.insert(self.Window.Tabs, tab)
+		table.insert(self.Tabs, tab)
+		if #self.Window.Tabs == 1 then
+			task.defer(function()
+				if not self.Window.Destroyed and tab and not tab.Destroyed then
+					self.Window:SelectTab(tab)
+				end
+			end)
+		end
+		return tab
+	end
+
+	function group:SetCollapsed(v)
+		if not collapseEnabled then return end
+		self.Collapsed = v == true
+		tabsHolder.Visible = not self.Collapsed
+		if chevron then
+			QuickTween(chevron, { Rotation = self.Collapsed and -90 or 0 })
+		end
+	end
+
+	function group:Destroy()
+		for _, t in ipairs(self.Tabs) do
+			t:Destroy()
+		end
+		self.Maid:Destroy()
+		container:Destroy()
+	end
+
+	return group
+end
+
 function Window:AddTab(config)
 	local tab = Tab.new(self, config or {})
 	table.insert(self.Tabs, tab)
 	if #self.Tabs == 1 then
-		self:SelectTab(tab)
+		task.defer(function()
+			if not self.Destroyed and tab and not tab.Destroyed then
+				self:SelectTab(tab)
+			end
+		end)
 	end
 	return tab
 end
 
 function Window:SelectTab(tab)
+	if not tab then return end
 	for _, t in ipairs(self.Tabs) do
 		t:SetActive(t == tab)
 	end
 	self.CurrentTab = tab
+	if tab.Page then
+		tab.Page.Visible = true
+		task.defer(function()
+			if tab.Page and tab.Page.Parent then
+				tab.Page.CanvasPosition = Vector2.zero
+			end
+		end)
+	end
 end
 
 function Window:SetTitle(text)
@@ -3163,6 +4458,66 @@ end
 function Window:SetSearchEnabled(enabled: boolean)
 	self.SearchEnabled = enabled
 	self.SearchBox.Visible = enabled
+	if self.TopBarButtons then
+		self.TopBarButtons.Position = enabled and UDim2.new(1, -170, 0.5, 0) or UDim2.new(1, -14, 0.5, 0)
+	end
+end
+
+function Window:AddTopBarButton(config)
+	config = config or {}
+	if not self.TopBarButtons then return nil end
+	local tokens = Library:GetTheme()
+	self._TopBarButtonCount = (self._TopBarButtonCount or 0) + 1
+
+	local btn = Utility.Create("ImageButton", {
+		Name = "TopBarBtn_" .. (config.Name or tostring(self._TopBarButtonCount)),
+		BackgroundColor3 = tokens.SurfaceSecondary,
+		Size = UDim2.fromOffset(28, 28),
+		Image = config.Icon or config.Image or "",
+		ImageColor3 = tokens.Text,
+		ScaleType = Enum.ScaleType.Fit,
+		AutoButtonColor = false,
+		LayoutOrder = self._TopBarButtonCount,
+		Parent = self.TopBarButtons,
+	})
+	RegisterTheme(btn, "BackgroundColor3", "SurfaceSecondary")
+	RegisterTheme(btn, "ImageColor3", "Text")
+	Utility.Create("UICorner", { CornerRadius = UDim.new(0, 7), Parent = btn })
+	Utility.Create("UIPadding", {
+		PaddingTop = UDim.new(0, 5),
+		PaddingBottom = UDim.new(0, 5),
+		PaddingLeft = UDim.new(0, 5),
+		PaddingRight = UDim.new(0, 5),
+		Parent = btn,
+	})
+
+	if config.Tooltip then
+		self.Maid:Give(BindTooltip(btn, function() return config.Tooltip end))
+	end
+
+	self.Maid:Give(btn.MouseEnter:Connect(function()
+		SpringTween(btn, { BackgroundColor3 = tokens.SurfaceTertiary }, 10)
+	end))
+	self.Maid:Give(btn.MouseLeave:Connect(function()
+		SpringTween(btn, { BackgroundColor3 = tokens.SurfaceSecondary }, 10)
+	end))
+	self.Maid:Give(btn.Activated:Connect(function()
+		Utility.SafeCallback(config.Callback)
+	end))
+
+	local api = {
+		Button = btn,
+		SetIcon = function(_, icon)
+			btn.Image = icon or ""
+		end,
+		SetVisible = function(_, v)
+			btn.Visible = v
+		end,
+		Destroy = function()
+			btn:Destroy()
+		end,
+	}
+	return api
 end
 
 function Window:SetCompactTab(enabled: boolean)
@@ -3247,19 +4602,26 @@ end
 
 function Library:CreateWindow(config: WindowConfig)
 	if not Library._NotificationHolder then
-		local holder = Utility.Create("Frame", {
-			Name = "NotificationHolder",
-			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(1, 1),
-			Parent = gethui(),
-		})
-		pcall(protectgui, holder)
-		Library._NotificationHolder = holder
+		local holderParent = SafeParent()
+		if holderParent then
+			local holder = Utility.Create("Frame", {
+				Name = "NotificationHolder",
+				BackgroundTransparency = 1,
+				Size = UDim2.fromScale(1, 1),
+				Parent = holderParent,
+			})
+			SafeProtect(holder)
+			Library._NotificationHolder = holder
+		end
 	end
 	if config and config.Theme then
 		Library:SetTheme(config.Theme)
 	end
-	return Window.new(self, config or {})
+	local window = Window.new(self, config or {})
+	if not window then
+		warn("[Library] CreateWindow failed — run as LocalScript in Play mode")
+	end
+	return window
 end
 
 function Library:Notify(config)
