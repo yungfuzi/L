@@ -2,44 +2,21 @@
 
 Modern **macOS-inspired** Roblox UI framework in a **single ModuleScript** (`Library.lua`).
 
-Designed for the current Roblox engine, executor-friendly parenting, metatable OOP, centralized theme/flags, and spring-style motion.
 
 | | |
 |---|---|
 | **Version** | 2.12.2 |
-| **File** | `Library.lua` (one ModuleScript) |
+| **File** | `Library.lua` |
 | **Themes** | `macOS Dark`, `macOS Light` |
 | **Architecture** | Window → Tab / TabGroup → Section → Components |
 
----
-
-## Features
-
-- Single self-contained ModuleScript
-- Metatable OOP (`Window`, `Tab`, `Section`, components)
-- macOS visual language (traffic lights, soft surfaces, hairline rows)
-- `UIShadow` where available, with safe fallbacks
-- Central theme registry + live updates
-- `Library.Flags` with `.Value`, `.Text`, `.Set`, etc.
-- Spring / exponential tweens
-- Compact tabs, DPI scale, search, top-bar buttons
-- `ElementsRow` separators (System Settings style)
-- Link popovers on Toggle / Label
-- Modal color picker (HSV + Confirm / Cancel)
-- Notifications & confirm dialogs
-- Tooltips, disable/hide APIs, config save/load helpers
 
 ---
 
 ## Install
 
-1. Create a **ModuleScript** named `Library`.
-2. Paste the contents of `Library.lua`.
-3. From a LocalScript / executor script:
-
 ```lua
-local Library = require(path.to.Library)
--- or loadstring / readfile in executor environments
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/yungfuzi/L/refs/heads/main/Axez/Library.lua"))()
 ```
 
 ---
@@ -47,10 +24,10 @@ local Library = require(path.to.Library)
 ## Quick start
 
 ```lua
-local Library = require(path.to.Library)
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/yungfuzi/L/refs/heads/main/Axez/Library.lua"))()
 
 local Window = Library:CreateWindow({
-	Title = "Nebula",
+	Title = "Axez",
 	Subtitle = "v2.12.2",
 	Icon = "house",
 	Size = UDim2.fromOffset(780, 520),
@@ -608,10 +585,10 @@ Library:CreateWindow({
 ## Full example
 
 ```lua
-local Library = require(path.to.Library)
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/yungfuzi/L/refs/heads/main/Axez/Library.lua"))()
 
 local Window = Library:CreateWindow({
-	Title = "Nebula",
+	Title = "Axez",
 	Subtitle = "v2.12.2",
 	Icon = "house",
 	Size = UDim2.fromOffset(780, 520),
@@ -688,20 +665,12 @@ General:AddButton({ Name = "Run" })
 
 Library:Notify({
 	Title = "Loaded",
-	Description = "Nebula is ready",
+	Description = "Axez is ready",
 	Type = "Success",
 	Duration = 4,
 })
 ```
 
----
-
-## Notes
-
-- **One ModuleScript only** — do not split into a folder of modules.
-- Parenting prefers `gethui()` → `PlayerGui` → `CoreGui` for Studio + executor.
-- Prefer modern APIs (`Activated`, `AutomaticSize`, `UICorner`, `UIStroke`, `UIShadow` when present).
-- Scrollbars are hidden in main content (`ScrollBarThickness = 0`); Link popup uses a thin scrollbar when content exceeds max height.
 
 ---
 
