@@ -1859,7 +1859,6 @@ local Library do
 					Size = UDim2New(1, 0, 0, 15),
 					ZIndex = 2,
 					BorderSizePixel = 0,
-					ClipsDescendants = true,
 					BackgroundColor3 = FromRGB(36, 32, 39)
 				})  Items["RealSlider"]:AddToTheme({BackgroundColor3 = "Element"})
 
@@ -1901,13 +1900,13 @@ local Library do
 				})
 
 				Items["Drag"] = Instances:Create("Frame", {
-					Parent = Items["RealSlider"].Instance,
+					Parent = Items["Accent"].Instance,
 					Name = "\0",
 					BorderColor3 = FromRGB(0, 0, 0),
-					AnchorPoint = Vector2New(0.5, 0.5),
-					Position = UDim2New(0.5, 0, 0.5, 0),
-					Size = UDim2New(0, 7, 0, 13),
-					ZIndex = 3,
+					AnchorPoint = Vector2New(1, 0.5),
+					Position = UDim2New(1, 0, 0.5, 0),
+					Size = UDim2New(0, 7, 1, 0),
+					ZIndex = 2,
 					BorderSizePixel = 0,
 					BackgroundColor3 = FromRGB(255, 255, 255)
 				})
@@ -1946,22 +1945,7 @@ local Library do
 
 				Library.Flags[self.Flag] = self.Value
 
-				local Range = Data.Max - Data.Min
-				local Scale = Range == 0 and 0 or (self.Value - Data.Min) / Range
-				Scale = MathClamp(Scale, 0, 1)
-
-				local TrackWidth = Items["RealSlider"].Instance.AbsoluteSize.X
-				local KnobHalf = 3.5
-				local KnobScale = Scale
-				if TrackWidth > 0 then
-					local MinScale = KnobHalf / TrackWidth
-					local MaxScale = 1 - (KnobHalf / TrackWidth)
-					KnobScale = MathClamp(Scale, MinScale, MaxScale)
-				end
-
-				local TweenInfoQuick = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-				Items["Accent"]:Tween(TweenInfoQuick, {Size = UDim2New(Scale, 0, 1, 0)})
-				Items["Drag"]:Tween(TweenInfoQuick, {Position = UDim2New(KnobScale, 0, 0.5, 0)})
+				Items["Accent"]:Tween(TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2New((self.Value - Data.Min) / (Data.Max - Data.Min), 0, 1, 0)})
 				Items["Value"].Instance.Text = StringFormat("%s%s", tostring(self.Value), Data.Suffix)
 
 				if Data.Callback then 
@@ -5066,31 +5050,47 @@ local Library do
 	Library.Notification = function(self, Text, Description, Duration)
 		Duration = math.max(Duration or 1, 0.1)
 
+		local NotifWidth = 320
+		local SlideInfo = TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+		local SlideOutInfo = TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+
 		local Items = { } do
 			Items["Notification"] = Instances:Create("Frame", {
 				Parent = Library.NotifHolder.Instance,
 				Name = "Notification",
+				BackgroundTransparency = 1,
+				AutomaticSize = Enum.AutomaticSize.Y,
+				BorderSizePixel = 0,
+				ClipsDescendants = true,
+				ZIndex = 601,
+				Size = UDim2New(0, NotifWidth, 0, 0)
+			})
+
+			Items["Inner"] = Instances:Create("Frame", {
+				Parent = Items["Notification"].Instance,
+				Name = "\0",
 				BackgroundTransparency = 0.06,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				BackgroundColor3 = FromRGB(16, 16, 16),
 				BorderSizePixel = 0,
 				ZIndex = 601,
-				Size = UDim2New(0, 320, 0, 70)
-			}) Items["Notification"]:AddToTheme({BackgroundColor3 = "Background"})
+				Size = UDim2New(0, NotifWidth, 0, 70),
+				Position = UDim2New(0, NotifWidth, 0, 0)
+			}) Items["Inner"]:AddToTheme({BackgroundColor3 = "Background"})
 
 			Instances:Create("UICorner", {
-				Parent = Items["Notification"].Instance,
+				Parent = Items["Inner"].Instance,
 				CornerRadius = UDimNew(0, 8)
 			})
 
 			Items["Stroke"] = Instances:Create("UIStroke", {
-				Parent = Items["Notification"].Instance,
+				Parent = Items["Inner"].Instance,
 				Color = FromRGB(158, 114, 158),
 				Transparency = 0.8
 			})
 
 			Items["Title"] = Instances:Create("TextLabel", {
-				Parent = Items["Notification"].Instance,
+				Parent = Items["Inner"].Instance,
 				FontFace = Library.Font,
 				Text = Text,
 				TextColor3 = FromRGB(199, 199, 203),
@@ -5103,7 +5103,7 @@ local Library do
 			}) Items["Title"]:AddToTheme({TextColor3 = "Text"})
 
 			Items["Description"] = Instances:Create("TextLabel", {
-				Parent = Items["Notification"].Instance,
+				Parent = Items["Inner"].Instance,
 				FontFace = Library.Font,
 				Text = Description,
 				TextColor3 = FromRGB(180, 180, 185),
@@ -5119,7 +5119,7 @@ local Library do
 			}) Items["Description"]:AddToTheme({TextColor3 = "Text"})
 
 			Items["Duration"] = Instances:Create("Frame", {
-				Parent = Items["Notification"].Instance,
+				Parent = Items["Inner"].Instance,
 				BackgroundColor3 = FromRGB(44, 38, 44),
 				BorderSizePixel = 0,
 				ZIndex = 602,
@@ -5139,15 +5139,29 @@ local Library do
 			})
 		end
 
+		-- slide in from the right
+		Items["Inner"]:Tween(SlideInfo, {Position = UDim2New(0, 0, 0, 0)})
+
 		Items["Accent"]:Tween(
 			TweenInfo.new(Duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
 			{Size = UDim2New(0, 0, 1, 0)}
 		)
 
 		task.delay(Duration, function()
-			Tween:Create(Items["Notification"].Instance, TweenInfo.new(0.3), {BackgroundTransparency = 1}, true)
+			if not Items["Inner"] or not Items["Inner"].Instance then
+				return
+			end
+
+			-- slide out to the right + fade
+			Items["Inner"]:Tween(SlideOutInfo, {
+				Position = UDim2New(0, NotifWidth + 20, 0, 0),
+				BackgroundTransparency = 1
+			})
+
 			task.wait(0.3)
-			Items["Notification"]:Clean()
+			if Items["Notification"] then
+				Items["Notification"]:Clean()
+			end
 		end)
 	end
 
