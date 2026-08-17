@@ -840,7 +840,21 @@ local Library do
 		end
 	end
 
+	Library.CloseOpenFrames = function(self, Except)
+		local ToClose = { }
+		for Frame, Value in pairs(self.OpenFrames) do
+			if Value and Value ~= Except and type(Value.SetOpen) == "function" then
+				TableInsert(ToClose, Value)
+			end
+		end
+		for _, Value in ipairs(ToClose) do
+			pcall(Value.SetOpen, Value, false)
+		end
+	end
+
 	Library.Unload = function(self)
+		Library:CloseOpenFrames()
+
 		for Index, Value in self.UnloadCallbacks do
 			Library:SafeCall(Value)
 		end
@@ -2462,71 +2476,40 @@ local Library do
 
 				if self.IsOpen then
 					holder.Visible = true
+					holder.ZIndex = 120
 					if icon and icon.Tween then icon:Tween(nil, {Rotation = -90}) end
 
+					if RenderStepped then RenderStepped:Disconnect(); RenderStepped = nil end
 					RenderStepped = RunService.RenderStepped:Connect(function()
-
 						if holder and holder.Parent and btn then
-							holder.Position = UDim2New(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + 30)
+							holder.Position = UDim2New(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 4)
 						end
 					end)
 
-
-					for _, v in pairs(Library.OpenFrames) do
-						if v ~= self and v.Options and type(v.SetOpen) == "function" then
-							pcall(v.SetOpen, v, false)
-						end
-					end
+					Library:CloseOpenFrames(self)
 					Library.OpenFrames[self] = self
 				else
 					if icon and icon.Tween then icon:Tween(nil, {Rotation = 0}) end
 					if Library.OpenFrames[self] then Library.OpenFrames[self] = nil end
 					if RenderStepped then RenderStepped:Disconnect(); RenderStepped = nil end
+					holder.Visible = false
+					holder.ZIndex = 12
 				end
-
 
 				if not holder or not holder.Parent then
 					Debounce = false
 					return
 				end
 
-				local Descendants = holder:GetDescendants()
-				table.insert(Descendants, holder)
-
-				local NewTween
-				for _, Object in ipairs(Descendants) do
-					local TransparencyProperty = Tween:GetProperty(Object)
-					if TransparencyProperty and not string.find(Object.ClassName, "UI") then
-						Object.ZIndex = self.IsOpen and 1000 or 0
-						if type(TransparencyProperty) == "table" then
-							for _, Property in ipairs(TransparencyProperty) do
-								NewTween = Tween:FadeItem(Object, Property, self.IsOpen, Data.Window.FadeSpeed)
-							end
-						else
-							NewTween = Tween:FadeItem(Object, TransparencyProperty, self.IsOpen, Data.Window.FadeSpeed)
-						end
-					end
-				end
-
-
-				if NewTween and NewTween.Tween then
-					Library:Connect(NewTween.Tween.Completed, function()
-						Debounce = false
-						if holder and holder.Parent then
-							holder.Visible = self.IsOpen
-						end
-					end)
-				else
-					Debounce = false
-					if holder and holder.Parent then
-						holder.Visible = self.IsOpen
-					end
-				end
+				Debounce = false
 			end
 
 
 			function Dropdown:SetVisible(Bool)
 				Items["Dropdown"].Instance.Visible = Bool
+				if not Bool then
+					self:SetOpen(false)
+				end
 			end
 
 			local SearchData = {
@@ -3027,6 +3010,9 @@ local Library do
 
 			function SearchBox:SetVisible(Bool)
 				Items["SearchBox"].Instance.Visible = not not Bool
+				if not Bool then
+					self:SetOpen(false)
+				end
 			end
 
 			local Debounce = false
@@ -3048,63 +3034,33 @@ local Library do
 
 				if self.IsOpen then
 					panel.Visible = true
+					panel.ZIndex = 120
 					if icon and icon.Tween then icon:Tween(nil, {Rotation = -90}) end
 
 					Items["Search"].Instance.Text = ""
 					SearchBox.Filter = ""
 					ApplyFilter()
 
+					if RenderStepped then RenderStepped:Disconnect(); RenderStepped = nil end
 					RenderStepped = RunService.RenderStepped:Connect(function()
 						if panel and panel.Parent and btn then
 							local Width = MathMax(btn.AbsoluteSize.X, 160)
 							panel.Size = UDim2New(0, Width, 0, 180)
-							panel.Position = UDim2New(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + 30)
+							panel.Position = UDim2New(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 4)
 						end
 					end)
 
-					for _, v in pairs(Library.OpenFrames) do
-						if v ~= self and type(v.SetOpen) == "function" then
-							pcall(v.SetOpen, v, false)
-						end
-					end
+					Library:CloseOpenFrames(self)
 					Library.OpenFrames[self] = self
 				else
 					if icon and icon.Tween then icon:Tween(nil, {Rotation = 0}) end
 					if Library.OpenFrames[self] then Library.OpenFrames[self] = nil end
 					if RenderStepped then RenderStepped:Disconnect(); RenderStepped = nil end
+					panel.Visible = false
+					panel.ZIndex = 12
 				end
 
-				local Descendants = panel:GetDescendants()
-				TableInsert(Descendants, panel)
-
-				local NewTween
-				for _, Object in ipairs(Descendants) do
-					local TransparencyProperty = Tween:GetProperty(Object)
-					if TransparencyProperty and not StringFind(Object.ClassName, "UI") then
-						Object.ZIndex = self.IsOpen and 1000 or 0
-						if type(TransparencyProperty) == "table" then
-							for _, Property in ipairs(TransparencyProperty) do
-								NewTween = Tween:FadeItem(Object, Property, self.IsOpen, Data.Window and Data.Window.FadeSpeed)
-							end
-						else
-							NewTween = Tween:FadeItem(Object, TransparencyProperty, self.IsOpen, Data.Window and Data.Window.FadeSpeed)
-						end
-					end
-				end
-
-				if NewTween and NewTween.Tween then
-					Library:Connect(NewTween.Tween.Completed, function()
-						Debounce = false
-						if panel and panel.Parent then
-							panel.Visible = self.IsOpen
-						end
-					end)
-				else
-					Debounce = false
-					if panel and panel.Parent then
-						panel.Visible = self.IsOpen
-					end
-				end
+				Debounce = false
 			end
 
 			Items["Search"]:Connect("Changed", function(Prop)
@@ -3612,73 +3568,45 @@ local Library do
 					return 
 				end
 
-				self.IsOpen = Bool
-
+				self.IsOpen = not not Bool
 				Debounce = true
 
+				local holder = Items["OptionHolder"].Instance
+
 				if self.IsOpen then 
-					Items["OptionHolder"].Instance.Visible = true 
+					holder.Visible = true 
+					holder.ZIndex = 120
 					Items["Icon"]:Tween(nil, {Rotation = -90})
 
+					if RenderStepped then RenderStepped:Disconnect(); RenderStepped = nil end
 					RenderStepped = RunService.RenderStepped:Connect(function()
-						Items["OptionHolder"].Instance.Position = UDim2New(0, Items["RealDropdown"].Instance.AbsolutePosition.X, 0, Items["RealDropdown"].Instance.AbsolutePosition.Y + 30)
+						local btn = Items["RealDropdown"].Instance
+						holder.Position = UDim2New(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 4)
 					end)
 
-					for Index, Value in Library.OpenFrames do 
-						if Value ~= self and Value.Options then
-							Value:SetOpen(false)
-						end
-					end
-
+					Library:CloseOpenFrames(self)
 					Library.OpenFrames[self] = self
 				else
 					Items["Icon"]:Tween(nil, {Rotation = 0})
-
 					if Library.OpenFrames[self] then 
 						Library.OpenFrames[self] = nil
 					end
-
 					if RenderStepped then 
 						RenderStepped:Disconnect()
 						RenderStepped = nil
 					end
+					holder.Visible = false
+					holder.ZIndex = 12
 				end
 
-				local Descendants = Items["OptionHolder"].Instance:GetDescendants()
-				TableInsert(Descendants, Items["OptionHolder"].Instance)
-
-				local NewTween
-
-				for _, Object in Descendants do 
-					local TransparencyProperty = Tween:GetProperty(Object)
-
-					if not TransparencyProperty then 
-						continue
-					end
-
-					if StringFind(Object.ClassName, "UI") then
-						continue
-					end
-
-					Object.ZIndex = self.IsOpen and 16 or 0
-
-					if type(TransparencyProperty) == "table" then 
-						for _, Property in TransparencyProperty do 
-							NewTween = Tween:FadeItem(Object, Property, self.IsOpen, Data.Window.FadeSpeed)
-						end
-					else
-						NewTween = Tween:FadeItem(Object, TransparencyProperty, self.IsOpen, Data.Window.FadeSpeed)
-					end
-				end
-
-				Library:Connect(NewTween.Tween.Completed, function()
-					Debounce = false
-					Items["OptionHolder"].Instance.Visible = self.IsOpen
-				end)
+				Debounce = false
 			end
 
 			function Dropdown:SetVisible(Bool)
 				Items["Dropdown"].Instance.Visible = Bool
+				if not Bool then
+					self:SetOpen(false)
+				end
 			end
 
 			local SearchData = {
@@ -4124,59 +4052,27 @@ local Library do
 					return 
 				end
 
-				self.IsOpen = Bool 
-
+				self.IsOpen = not not Bool
 				Debounce = true
 
+				local window = Items["ColorpickerWindow"].Instance
+
 				if self.IsOpen then 
-					Items["ColorpickerWindow"].Instance.Visible = true
-					Items["ColorpickerWindow"].Instance.Position = UDim2New(0, Items["ColorpickerButton"].Instance.AbsolutePosition.X + 50, 0, Items["ColorpickerButton"].Instance.AbsolutePosition.Y + 26)
+					window.Visible = true
+					window.ZIndex = 130
+					window.Position = UDim2New(0, Items["ColorpickerButton"].Instance.AbsolutePosition.X + 50, 0, Items["ColorpickerButton"].Instance.AbsolutePosition.Y + 26)
 
-					for Index, Value in Library.OpenFrames do 
-						if Value ~= self and Value.Hue then
-							Value:SetOpen(false)
-						end
-					end
-
+					Library:CloseOpenFrames(self)
 					Library.OpenFrames[self] = self
 				else
 					if Library.OpenFrames[self] then 
 						Library.OpenFrames[self] = nil
 					end
+					window.Visible = false
+					window.ZIndex = 12
 				end
 
-				local Descendants = Items["ColorpickerWindow"].Instance:GetDescendants()
-				TableInsert(Descendants, Items["ColorpickerWindow"].Instance)
-
-				local NewTween
-
-				for _, Object in Descendants do 
-					local TransparencyProperty = Tween:GetProperty(Object)
-
-					if not TransparencyProperty then 
-						continue
-					end
-
-					Items["AlphaDragger"].Instance.ZIndex = self.IsOpen and 999 or 1
-					Items["PaletteDragger"].Instance.ZIndex = self.IsOpen and 999 or 1
-
-					if not StringFind(Object.ClassName, "UI") and not (Object:IsA("ImageLabel") and Object.Image == "rbxassetid://112971167999062") then
-						Object.ZIndex = self.IsOpen and 999 or 1
-					end
-
-					if type(TransparencyProperty) == "table" then 
-						for _, Property in TransparencyProperty do 
-							NewTween = Tween:FadeItem(Object, Property, self.IsOpen, Data.Window.FadeSpeed)
-						end
-					else
-						NewTween = Tween:FadeItem(Object, TransparencyProperty, self.IsOpen, Data.Window.FadeSpeed)
-					end
-				end
-
-				Library:Connect(NewTween.Tween.Completed, function()
-					Debounce = false
-					Items["ColorpickerWindow"].Instance.Visible = self.IsOpen
-				end)
+				Debounce = false
 			end
 
 			function Colorpicker:SlidePalette(Input)
@@ -4722,58 +4618,27 @@ local Library do
 					return
 				end
 
-				self.IsOpen = Bool 
-
+				self.IsOpen = not not Bool
 				Debounce = true
 
+				local window = Items["KeybindWindow"].Instance
+
 				if self.IsOpen then
-					Items["KeybindWindow"].Instance.Visible = true
-					Items["KeybindWindow"].Instance.Position = UDim2New(0, Items["KeyButton"].Instance.AbsolutePosition.X, 0, Items["KeyButton"].Instance.AbsolutePosition.Y + 25)
+					window.Visible = true
+					window.ZIndex = 130
+					window.Position = UDim2New(0, Items["KeyButton"].Instance.AbsolutePosition.X, 0, Items["KeyButton"].Instance.AbsolutePosition.Y + 25)
 
-					for Index, Value in Library.OpenFrames do
-						if Value ~= self and Value.Key then 
-							Value:SetOpen(false)
-						end
-					end
-
+					Library:CloseOpenFrames(self)
 					Library.OpenFrames[self] = self
 				else
 					if Library.OpenFrames[self] then
 						Library.OpenFrames[self] = nil
 					end
+					window.Visible = false
+					window.ZIndex = 12
 				end
 
-				local Descendants = Items["KeybindWindow"].Instance:GetDescendants()
-				TableInsert(Descendants, Items["KeybindWindow"].Instance)
-
-				local NewTween
-
-				for _, Object in Descendants do 
-					local TransparencyProperty = Tween:GetProperty(Object)
-
-					if not TransparencyProperty then
-						continue
-					end
-
-					if StringFind(Object.ClassName, "UI") then
-						continue
-					end
-
-					Object.ZIndex = self.IsOpen and 15 or 1
-
-					if type(TransparencyProperty) == "table" then 
-						for _, Property in TransparencyProperty do 
-							NewTween = Tween:FadeItem(Object, Property, self.IsOpen, Data.Window.FadeSpeed)
-						end
-					else
-						NewTween = Tween:FadeItem(Object, TransparencyProperty, self.IsOpen, Data.Window.FadeSpeed)
-					end
-				end
-
-				Library:Connect(NewTween.Tween.Completed, function()
-					Debounce = false
-					Items["KeybindWindow"].Instance.Visible = self.IsOpen
-				end)
+				Debounce = false
 			end
 
 			function Keybind:Press(Bool)
@@ -5068,6 +4933,8 @@ local Library do
 			CanClose = true
 		end
 
+		Library:CloseOpenFrames()
+
 		local Modal = {
 			Closed = false,
 			Items = { }
@@ -5083,7 +4950,7 @@ local Library do
 				BackgroundColor3 = FromRGB(0, 0, 0),
 				BorderSizePixel = 0,
 				Size = UDim2New(1, 0, 1, 0),
-				ZIndex = 200,
+				ZIndex = 500,
 				Active = true
 			})
 
@@ -5096,7 +4963,7 @@ local Library do
 				AutomaticSize = Enum.AutomaticSize.Y,
 				BackgroundTransparency = 1,
 				BorderSizePixel = 0,
-				ZIndex = 201,
+				ZIndex = 501,
 				BackgroundColor3 = FromRGB(15, 12, 16)
 			})  Items["Modal"]:AddToTheme({BackgroundColor3 = "Background"})
 
@@ -5128,7 +4995,7 @@ local Library do
 				BackgroundTransparency = 1,
 				BorderSizePixel = 0,
 				Size = UDim2New(1, 0, 0, 22),
-				ZIndex = 202,
+				ZIndex = 502,
 				BackgroundColor3 = FromRGB(255, 255, 255)
 			})
 
@@ -5143,7 +5010,7 @@ local Library do
 				BackgroundTransparency = 1,
 				BorderSizePixel = 0,
 				Size = UDim2New(1, CanClose and -28 or 0, 1, 0),
-				ZIndex = 202,
+				ZIndex = 502,
 				BackgroundColor3 = FromRGB(255, 255, 255)
 			})  Items["Title"]:AddToTheme({TextColor3 = "Text"})
 
@@ -5156,7 +5023,7 @@ local Library do
 					BorderSizePixel = 0,
 					Size = UDim2New(0, 16, 0, 16),
 					Position = UDim2New(1, -16, 0.5, -8),
-					ZIndex = 203,
+					ZIndex = 503,
 					ImageColor3 = FromRGB(255, 255, 255),
 					AutoButtonColor = false
 				})  Items["Close"]:AddToTheme({ImageColor3 = "Text"})
@@ -5176,7 +5043,7 @@ local Library do
 				BorderSizePixel = 0,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				Size = UDim2New(1, 0, 0, 0),
-				ZIndex = 202,
+				ZIndex = 502,
 				BackgroundColor3 = FromRGB(255, 255, 255)
 			})  Items["Content"]:AddToTheme({TextColor3 = "Text"})
 
@@ -5187,7 +5054,7 @@ local Library do
 				BorderSizePixel = 0,
 				Size = UDim2New(1, 0, 0, 32),
 				AutomaticSize = Enum.AutomaticSize.Y,
-				ZIndex = 202,
+				ZIndex = 502,
 				BackgroundColor3 = FromRGB(255, 255, 255)
 			})
 
@@ -5232,7 +5099,7 @@ local Library do
 					BorderSizePixel = 0,
 					Size = UDim2New(0, 0, 0, 30),
 					AutomaticSize = Enum.AutomaticSize.X,
-					ZIndex = 203,
+					ZIndex = 503,
 					TextSize = 13,
 					BackgroundColor3 = BtnColor or FromRGB(36, 32, 39)
 				})
@@ -5264,7 +5131,7 @@ local Library do
 					BackgroundTransparency = 1,
 					BorderSizePixel = 0,
 					Size = UDim2New(1, 0, 1, 0),
-					ZIndex = 204,
+					ZIndex = 504,
 					BackgroundColor3 = FromRGB(255, 255, 255)
 				})  BtnLabel:AddToTheme({TextColor3 = "Text"})
 
@@ -6121,7 +5988,19 @@ local Library do
 			Bool = not not Bool
 			self.Open = not Bool
 
+			Library:CloseOpenFrames()
+
 			Items["Content"].Instance.Visible = self.Open
+
+			if self.Open then
+				Items["PageSection"].Instance.AutomaticSize = Enum.AutomaticSize.Y
+				Items["PageSection"].Instance.Size = UDim2New(1, 0, 0, 0)
+				Items["PageSection"].Instance.ClipsDescendants = false
+			else
+				Items["PageSection"].Instance.AutomaticSize = Enum.AutomaticSize.None
+				Items["PageSection"].Instance.Size = UDim2New(1, 0, 0, 22)
+				Items["PageSection"].Instance.ClipsDescendants = true
+			end
 
 			if Items["Collapse"] then
 				Items["Collapse"]:Tween(nil, {Rotation = self.Open and 0 or -90})
@@ -6348,6 +6227,8 @@ local Library do
 			Items["Page"].Instance.Parent = self.Active and Page.Window.Items["Content"].Instance or Library.UnusedHolder.Instance
 
 			if self.Active then
+				Library:CloseOpenFrames()
+
 				Items["Page"].Instance.Visible = true
 
 				Items["Liner"]:Tween(nil, {BackgroundTransparency = 0, Size = UDim2New(0, 6, 1, -20)})
@@ -6571,8 +6452,20 @@ local Library do
 			Bool = not not Bool
 			self.Open = not Bool
 
+			Library:CloseOpenFrames()
+
 			Items["Content"].Instance.Visible = self.Open
 			Items["Divider"].Instance.Visible = self.Open
+
+			if self.Open then
+				Items["Section"].Instance.AutomaticSize = Enum.AutomaticSize.Y
+				Items["Section"].Instance.Size = UDim2New(1, 0, 0, 45)
+				Items["Section"].Instance.ClipsDescendants = false
+			else
+				Items["Section"].Instance.AutomaticSize = Enum.AutomaticSize.None
+				Items["Section"].Instance.Size = UDim2New(1, 0, 0, 36)
+				Items["Section"].Instance.ClipsDescendants = true
+			end
 
 			if Items["Collapse"] then
 				Items["Collapse"]:Tween(nil, {Rotation = self.Open and 0 or -90})
