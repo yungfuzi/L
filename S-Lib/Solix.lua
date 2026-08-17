@@ -815,6 +815,7 @@ local Library do
 		Size = UDim2New(0, 0, 1, 0),
 		BorderSizePixel = 0,
 		AutomaticSize = Enum.AutomaticSize.X,
+		ZIndex = 600,
 		BackgroundColor3 = FromRGB(255, 255, 255)
 	})
 
@@ -1858,6 +1859,7 @@ local Library do
 					Size = UDim2New(1, 0, 0, 15),
 					ZIndex = 2,
 					BorderSizePixel = 0,
+					ClipsDescendants = true,
 					BackgroundColor3 = FromRGB(36, 32, 39)
 				})  Items["RealSlider"]:AddToTheme({BackgroundColor3 = "Element"})
 
@@ -1899,13 +1901,13 @@ local Library do
 				})
 
 				Items["Drag"] = Instances:Create("Frame", {
-					Parent = Items["Accent"].Instance,
+					Parent = Items["RealSlider"].Instance,
 					Name = "\0",
 					BorderColor3 = FromRGB(0, 0, 0),
-					AnchorPoint = Vector2New(1, 0.5),
-					Position = UDim2New(1, 0, 0.5, 0),
-					Size = UDim2New(0, 7, 1, 0),
-					ZIndex = 2,
+					AnchorPoint = Vector2New(0.5, 0.5),
+					Position = UDim2New(0.5, 0, 0.5, 0),
+					Size = UDim2New(0, 7, 0, 13),
+					ZIndex = 3,
 					BorderSizePixel = 0,
 					BackgroundColor3 = FromRGB(255, 255, 255)
 				})
@@ -1944,7 +1946,22 @@ local Library do
 
 				Library.Flags[self.Flag] = self.Value
 
-				Items["Accent"]:Tween(TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2New((self.Value - Data.Min) / (Data.Max - Data.Min), 0, 1, 0)})
+				local Range = Data.Max - Data.Min
+				local Scale = Range == 0 and 0 or (self.Value - Data.Min) / Range
+				Scale = MathClamp(Scale, 0, 1)
+
+				local TrackWidth = Items["RealSlider"].Instance.AbsoluteSize.X
+				local KnobHalf = 3.5
+				local KnobScale = Scale
+				if TrackWidth > 0 then
+					local MinScale = KnobHalf / TrackWidth
+					local MaxScale = 1 - (KnobHalf / TrackWidth)
+					KnobScale = MathClamp(Scale, MinScale, MaxScale)
+				end
+
+				local TweenInfoQuick = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+				Items["Accent"]:Tween(TweenInfoQuick, {Size = UDim2New(Scale, 0, 1, 0)})
+				Items["Drag"]:Tween(TweenInfoQuick, {Position = UDim2New(KnobScale, 0, 0.5, 0)})
 				Items["Value"].Instance.Text = StringFormat("%s%s", tostring(self.Value), Data.Suffix)
 
 				if Data.Callback then 
@@ -2106,7 +2123,7 @@ local Library do
 					BorderColor3 = FromRGB(0, 0, 0),
 					AnchorPoint = Vector2New(1, 0),
 					Position = UDim2New(1, 0, 0, 0),
-					Size = UDim2New(0, not IsMobile and 135 or 75, 0, 25),
+					Size = UDim2New(0, not IsMobile and 135 or 130, 0, 25),
 					ZIndex = 2,
 					BorderSizePixel = 0,
 					BackgroundColor3 = FromRGB(36, 32, 39)
@@ -2177,7 +2194,7 @@ local Library do
 					BorderColor3 = FromRGB(0, 0, 0),
 					ScrollBarThickness = 1,
 					TopImage = "rbxassetid://128693616966482",
-					Size = UDim2New(0, 135, 0, 125),
+					Size = UDim2New(0, 130, 0, 125),
 					BottomImage = "rbxassetid://128693616966482",
 					Position = UDim2New(0, Items["RealDropdown"].Instance.AbsolutePosition.X, 0, Items["RealDropdown"].Instance.AbsolutePosition.Y + 30),
 					BackgroundColor3 = FromRGB(15, 12, 16)
@@ -2487,7 +2504,7 @@ local Library do
 					if RenderStepped then RenderStepped:Disconnect(); RenderStepped = nil end
 					RenderStepped = RunService.RenderStepped:Connect(function()
 						if holder and holder.Parent and btn then
-							holder.Size = UDim2New(0, btn.AbsoluteSize.X, 0, 125)
+							holder.Size = UDim2New(0, MathMax(btn.AbsoluteSize.X, 130), 0, 125)
 							holder.Position = UDim2New(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 4)
 						end
 					end)
@@ -3007,7 +3024,7 @@ local Library do
 					BorderColor3 = FromRGB(0, 0, 0),
 					AnchorPoint = Vector2New(1, 0),
 					Position = UDim2New(1, 0, 0, 0),
-					Size = UDim2New(0, not IsMobile and 135 or 75, 0, 25),
+					Size = UDim2New(0, not IsMobile and 135 or 130, 0, 25),
 					ZIndex = 2,
 					BorderSizePixel = 0,
 					BackgroundColor3 = FromRGB(36, 32, 39)
@@ -3078,7 +3095,7 @@ local Library do
 					BorderColor3 = FromRGB(0, 0, 0),
 					ScrollBarThickness = 1,
 					TopImage = "rbxassetid://128693616966482",
-					Size = UDim2New(0, 135, 0, 125),
+					Size = UDim2New(0, 130, 0, 125),
 					BottomImage = "rbxassetid://128693616966482",
 					Position = UDim2New(0, Items["RealDropdown"].Instance.AbsolutePosition.X, 0, Items["RealDropdown"].Instance.AbsolutePosition.Y + 30),
 					BackgroundColor3 = FromRGB(15, 12, 16)
@@ -3429,7 +3446,7 @@ local Library do
 					if RenderStepped then RenderStepped:Disconnect(); RenderStepped = nil end
 					RenderStepped = RunService.RenderStepped:Connect(function()
 						local btn = Items["RealDropdown"].Instance
-						holder.Size = UDim2New(0, btn.AbsoluteSize.X, 0, 125)
+						holder.Size = UDim2New(0, MathMax(btn.AbsoluteSize.X, 130), 0, 125)
 						holder.Position = UDim2New(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 4)
 					end)
 
@@ -4789,9 +4806,11 @@ local Library do
 			Items = { }
 		}
 
+		local ModalParent = (Library.WindowFrame and Library.WindowFrame.Instance) or Library.Holder.Instance
+
 		local Items = { } do
 			Items["Overlay"] = Instances:Create("TextButton", {
-				Parent = Library.Holder.Instance,
+				Parent = ModalParent,
 				Name = "\0",
 				Text = "",
 				AutoButtonColor = false,
@@ -4799,6 +4818,7 @@ local Library do
 				BackgroundColor3 = FromRGB(0, 0, 0),
 				BorderSizePixel = 0,
 				Size = UDim2New(1, 0, 1, 0),
+				Position = UDim2New(0, 0, 0, 0),
 				ZIndex = 500,
 				Active = true
 			})
@@ -4808,13 +4828,19 @@ local Library do
 				Name = "\0",
 				AnchorPoint = Vector2New(0.5, 0.5),
 				Position = UDim2New(0.5, 0, 0.5, 0),
-				Size = UDim2New(0, 360, 0, 0),
+				Size = UDim2New(0, 320, 0, 0),
 				AutomaticSize = Enum.AutomaticSize.Y,
 				BackgroundTransparency = 1,
 				BorderSizePixel = 0,
 				ZIndex = 501,
 				BackgroundColor3 = FromRGB(15, 12, 16)
 			})  Items["Modal"]:AddToTheme({BackgroundColor3 = "Background"})
+
+			Items["Scale"] = Instances:Create("UIScale", {
+				Parent = Items["Modal"].Instance,
+				Name = "\0",
+				Scale = 0.92
+			})
 
 			Instances:Create("UICorner", {
 				Parent = Items["Modal"].Instance,
@@ -4999,8 +5025,12 @@ local Library do
 			end
 			self.Closed = true
 
-			Items["Overlay"]:Tween(nil, {BackgroundTransparency = 1})
-			Items["Modal"]:Tween(nil, {BackgroundTransparency = 1})
+			local CloseInfo = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			Items["Overlay"]:Tween(CloseInfo, {BackgroundTransparency = 1})
+			Items["Modal"]:Tween(CloseInfo, {BackgroundTransparency = 1})
+			if Items["Scale"] then
+				Items["Scale"]:Tween(CloseInfo, {Scale = 0.9})
+			end
 
 			task.delay(0.2, function()
 				if Items["Overlay"] then
@@ -5009,9 +5039,12 @@ local Library do
 			end)
 		end
 
-		-- fade in
-		Items["Overlay"]:Tween(nil, {BackgroundTransparency = 0.45})
-		Items["Modal"]:Tween(nil, {BackgroundTransparency = 0.05})
+		local OpenInfo = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+		Items["Overlay"]:Tween(OpenInfo, {BackgroundTransparency = 0.45})
+		Items["Modal"]:Tween(OpenInfo, {BackgroundTransparency = 0.05})
+		if Items["Scale"] then
+			Items["Scale"]:Tween(OpenInfo, {Scale = 1})
+		end
 
 		if CanClose and Items["Close"] then
 			Items["Close"]:Connect("MouseButton1Down", function()
@@ -5041,6 +5074,7 @@ local Library do
 				AutomaticSize = Enum.AutomaticSize.Y,
 				BackgroundColor3 = FromRGB(16, 16, 16),
 				BorderSizePixel = 0,
+				ZIndex = 601,
 				Size = UDim2New(0, 320, 0, 70)
 			}) Items["Notification"]:AddToTheme({BackgroundColor3 = "Background"})
 
@@ -5063,6 +5097,7 @@ local Library do
 				TextSize = 16,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				BackgroundTransparency = 1,
+				ZIndex = 602,
 				Size = UDim2New(1, -20, 0, 20),
 				Position = UDim2New(0, 10, 0, 6)
 			}) Items["Title"]:AddToTheme({TextColor3 = "Text"})
@@ -5078,6 +5113,7 @@ local Library do
 				BackgroundTransparency = 1,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				TextWrapped = true,
+				ZIndex = 602,
 				Size = UDim2New(1, -20, 0, 0),
 				Position = UDim2New(0, 10, 0, 28)
 			}) Items["Description"]:AddToTheme({TextColor3 = "Text"})
@@ -5086,6 +5122,7 @@ local Library do
 				Parent = Items["Notification"].Instance,
 				BackgroundColor3 = FromRGB(44, 38, 44),
 				BorderSizePixel = 0,
+				ZIndex = 602,
 				Size = UDim2New(1, -20, 0, 6),
 				Position = UDim2New(0, 10, 1, -12)
 			}) Items["Duration"]:AddToTheme({BackgroundColor3 = "Inline"})
@@ -5326,12 +5363,19 @@ local Library do
 			Size = Properties.Size or Properties.size or (not IsMobile and UDim2New(0, 770, 0, 526) or UDim2New(0, 526, 0, 350)),
 			FadeSpeed = Properties.FadeSpeed or Properties.fadespeed or 0.25,
 			BackgroundIcon = Properties.BackgroundIcon or Properties.backgroundicon or "rbxassetid://",
-
+			SearchBar = Properties.SearchBar,
 			Pages = { },
 			IsOpen = false,
 
 			Items = { }
 		}
+
+		if Window.SearchBar == nil then
+			Window.SearchBar = Properties.searchbar
+		end
+		if Window.SearchBar == nil then
+			Window.SearchBar = true
+		end
 
 		local Items = { } do
 			Items["MainFrame"] = Instances:Create("Frame", {
@@ -5348,6 +5392,8 @@ local Library do
 				BorderSizePixel = 0,
 				BackgroundColor3 = FromRGB(15, 12, 16)
 			})  Items["MainFrame"]:AddToTheme({BackgroundColor3 = "Background"})
+
+			Library.WindowFrame = Items["MainFrame"]
 
 			Items["MainFrame"]:MakeDraggable()
 			Items["MainFrame"]:MakeResizeable(Vector2New(Window.Size.X.Offset, Window.Size.Y.Offset), Vector2New(9999, 9999))
@@ -5498,6 +5544,7 @@ local Library do
 				BorderColor3 = FromRGB(0, 0, 0),
 				ZIndex = 2,
 				BorderSizePixel = 0,
+				Visible = Window.SearchBar ~= false,
 				BackgroundColor3 = FromRGB(22, 20, 24)
 			})  Items["Search"]:AddToTheme({BackgroundColor3 = "Inline"})
 
@@ -6003,13 +6050,15 @@ local Library do
 			})
 
 			if not Page.IsKeyPage then
+				local SearchOffset = (Page.Window.SearchBar ~= false) and 43 or 0
+
 				Items["Columns"] = Instances:Create("Frame", {
 					Parent = Items["Page"].Instance,
 					Name = "\0",
 					BorderColor3 = FromRGB(0, 0, 0),
 					BackgroundTransparency = 1,
-					Position = UDim2New(0, 0, 0, 43),
-					Size = UDim2New(1, 0, 1, -43),
+					Position = UDim2New(0, 0, 0, SearchOffset),
+					Size = UDim2New(1, 0, 1, -SearchOffset),
 					ZIndex = 2,
 					BorderSizePixel = 0,
 					BackgroundColor3 = FromRGB(255, 255, 255)
@@ -6058,8 +6107,9 @@ local Library do
 					Page.ColumnsData[Index] = NewColumn
 				end
 			else
-				Items["Page"].Instance.Size = UDim2New(1, 0, 1, -43)
-				Items["Page"].Instance.Position = UDim2New(0, 0, 0, 43)
+				local KeySearchOffset = (Page.Window.SearchBar ~= false) and 43 or 0
+				Items["Page"].Instance.Size = UDim2New(1, 0, 1, -KeySearchOffset)
+				Items["Page"].Instance.Position = UDim2New(0, 0, 0, KeySearchOffset)
 
 				Instances:Create("UIListLayout", {
 					Parent = Items["Page"].Instance,
