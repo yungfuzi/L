@@ -23,21 +23,22 @@
  9. [Button](#button)
 10. [Slider](#slider)
 11. [Dropdown](#dropdown)
-12. [ToggleDropdown](#toggledropdown)
-13. [Label](#label)
-14. [Textbox](#textbox)
-15. [Colorpicker](#colorpicker)
-16. [Keybind](#keybind)
-17. [Notification](#notification)
-18. [Modal](#modal)
-19. [Watermark](#watermark)
-20. [KeybindList](#keybindlist)
-21. [Settings Page](#settings-page)
-22. [Config System](#config-system)
-23. [Theme System](#theme-system)
-24. [Library Utilities](#library-utilities)
-25. [Flags](#flags)
-26. [Example](#example)
+12. [SearchBox](#searchbox)
+13. [ToggleDropdown](#toggledropdown)
+14. [Label](#label)
+15. [Textbox](#textbox)
+16. [Colorpicker](#colorpicker)
+17. [Keybind](#keybind)
+18. [Notification](#notification)
+19. [Modal](#modal)
+20. [Watermark](#watermark)
+21. [KeybindList](#keybindlist)
+22. [Settings Page](#settings-page)
+23. [Config System](#config-system)
+24. [Theme System](#theme-system)
+25. [Library Utilities](#library-utilities)
+26. [Flags](#flags)
+27. [Example](#example)
 
 ---
 
@@ -49,8 +50,10 @@ Creates the main UI window.
 local Window = Library:Window({
     Name           = "My Hub",                          -- Title in the top-left
     Size           = UDim2.new(0, 770, 0, 526),          -- Optional (mobile defaults smaller)
+    MinSize        = Vector2.new(400, 300),              -- Minimum resize size
     FadeSpeed      = 0.25,                              -- Animation speed for dropdowns/pickers
-    BackgroundIcon = "rbxassetid://..."                 -- Optional background image
+    BackgroundIcon = "rbxassetid://...",                -- Optional background image
+    SearchBar      = true                               -- false hides the tab search bar
 })
 ```
 
@@ -62,8 +65,34 @@ local Window = Library:Window({
 | `Window:SetBackgroundImage(assetId)` | Change background image |
 | `Window:SetOpen(bool)` | Show or hide the window |
 | `Window:Minimize(bool)` | Collapse or expand the window |
+| `Window:ToggleUiButton(props)` | Create / customize the mobile open-close button |
 
-> **Menu Keybind:** Default is `RightControl`. Change via `Library.MenuKeybind = "Enum.KeyCode.X"`.
+### ToggleUiButton
+
+Floating button used to open/close the UI (auto-created on mobile by default).
+
+```lua
+local ToggleBtn = Window:ToggleUiButton({
+    OnlyMobile   = true,                         -- skip on desktop (default true)
+    Image        = "rbxassetid://...",           -- optional icon (hides text label)
+    Text         = "Menu",                       -- label when no Image
+    Size         = UDim2.new(0, 50, 0, 50),
+    Position     = UDim2.new(0, 125, 0, 125),
+    CornerRadius = UDim.new(1, 0),
+    Draggable    = true,
+    Visible      = true
+})
+
+ToggleBtn:SetVisible(true)
+ToggleBtn:SetImage("rbxassetid://...")
+ToggleBtn:SetText("Open")
+ToggleBtn:SetPosition(UDim2.new(0, 100, 0, 100))
+ToggleBtn:SetSize(UDim2.new(0, 60, 0, 60))
+```
+
+> **Close button:** Asks for confirmation via `Library:Modal` before unloading.  
+> **Menu Keybind:** Default is `RightControl`. Change via `Library.MenuKeybind = "Enum.KeyCode.X"`.  
+> **Resize:** Drag the bottom-right handle. Does not move the window while resizing.
 
 ---
 
@@ -393,6 +422,57 @@ MyDropdown:Add("Left Arm", "96215562143920")
 
 ---
 
+## SearchBox
+
+Inline searchable list (not a dropdown popup). Always visible inside the section.
+
+```lua
+local MySearchBox = Section:SearchBox({
+    Name        = "Player",
+    Flag        = "SelectedPlayer",
+    Items       = {"Alice", "Bob", "Charlie", "Diana"},
+    Default     = "Alice",       -- string, or table if Multi
+    Multi       = false,
+    Placeholder = "Search...",
+    MaxHeight   = 140,           -- list height
+    Disabled    = false,
+    Tooltip     = "Pick a player",
+    Callback    = function(value) end,
+    OnChanged   = function(value) end
+})
+```
+
+Layout:
+
+```
+Player
+┌─────────────────┐
+│ Search...       │
+├─────────────────┤
+│ Alice           │
+│ Bob             │
+│ Charlie         │
+└─────────────────┘
+```
+
+### Methods
+
+| Method | Description |
+| --- | --- |
+| `MySearchBox:Set(option)` | Set selected value (string or table for multi) |
+| `MySearchBox:Get()` | Get current value |
+| `MySearchBox:Add(option)` | Add an option |
+| `MySearchBox:Remove(option)` | Remove an option |
+| `MySearchBox:Clear()` | Remove all options |
+| `MySearchBox:Refresh(list)` | Clear and repopulate from a list |
+| `MySearchBox:SetMulti(bool)` | Toggle multi-select mode |
+| `MySearchBox:SetText(text)` | Change label |
+| `MySearchBox:SetDisabled(bool)` | Enable/disable |
+| `MySearchBox:SetVisible(bool)` | Show/hide |
+| `MySearchBox:OnChanged(callback)` | Subscribe to changes |
+
+---
+
 ## ToggleDropdown
 
 Dropdown combined with a toggle (enable/disable the feature + pick options).
@@ -562,7 +642,8 @@ MyToggle:Keybind({
 
 ## Notification
 
-Shows a timed toast notification in the top-right corner.
+Shows a timed toast notification in the top-right corner.  
+Slides **in from the right** and slides **out to the right** when dismissed. Always renders above the main UI.
 
 ```lua
 Library:Notification(
@@ -576,7 +657,7 @@ Library:Notification(
 
 ## Modal
 
-Centered dialog overlay with optional buttons and auto-close.
+Dialog overlay centered on the **window** (not the full screen). Optional buttons, X close, and auto-close duration.
 
 ```lua
 local Modal = Library:Modal({
@@ -590,6 +671,8 @@ local Modal = Library:Modal({
     }
 })
 ```
+
+Opens with a scale + fade animation; closes the same way.
 
 ### Methods
 
@@ -727,9 +810,11 @@ eclipse/
 
 | Method / Property | Description |
 | --- | --- |
-| `Library:Unload()` | Disconnect all signals, destroy UI, clear state |
-| `Library:Notification(title, desc, duration)` | Toast notification |
-| `Library:Modal(props)` | Centered modal dialog |
+| `Library:Unload()` | Run OnUnload callbacks, disconnect signals, destroy UI |
+| `Library:OnUnload(fn)` | Register a callback run before unload |
+| `Library:CloseOpenFrames(except?)` | Close open dropdowns / colorpickers / keybind menus |
+| `Library:Notification(title, desc, duration)` | Toast (slides from right, above UI) |
+| `Library:Modal(props)` | Dialog centered on the window |
 | `Library:Watermark(name)` | Create watermark |
 | `Library:KeybindList()` | Create keybind list overlay |
 | `Library:CreateSettingsPage(window, watermark, keybindList)` | Built-in settings page |
@@ -756,7 +841,7 @@ Every element with a `Flag` option stores its value in `Library.Flags[flagName]`
 | --- | --- |
 | Toggle / Checkbox | `boolean` |
 | Slider | `number` |
-| Dropdown / ToggleDropdown | `string` or `table` (multi) |
+| Dropdown / ToggleDropdown / SearchBox | `string` or `table` (multi) |
 | Textbox | `string` |
 | Colorpicker | `{ Color = hex, Alpha = number }` |
 | Keybind | `{ Key = string, Mode = string, Toggled = bool }` |
@@ -774,85 +859,112 @@ print(Library.Flags["SilentAim"])
 
 ## Example
 
+Full working demo lives in **`Example.lua`** (no Colorpicker / Keybind).
+
+Covers: Window (`MinSize`, `SearchBar`, `ToggleUiButton`), Page, PageSection, Section (collapsible), Toggle, Checkbox, Button, Slider, Dropdown, SearchBox, ToggleDropdown, Label, Textbox, Notification, Modal, Watermark, KeybindList, Settings page, OnUnload.
+
 ```lua
-local Library = loadstring(game:HttpGet("..."))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/yungfuzi/L/refs/heads/main/S-Lib/Solix.lua"))()
 
 local Window = Library:Window({
-    Name = "Solix Hub",
-    Size = UDim2.new(0, 770, 0, 526)
+    Name      = "Solix Hub",
+    Size      = UDim2.new(0, 770, 0, 526),
+    MinSize   = Vector2.new(500, 350),
+    FadeSpeed = 0.25,
+    SearchBar = true
+})
+
+Window:ToggleUiButton({
+    OnlyMobile = true,
+    Size       = UDim2.new(0, 50, 0, 50),
+    Position   = UDim2.new(0, 125, 0, 125),
+    Draggable  = true
 })
 
 local Watermark   = Library:Watermark("Solix Hub | v1.0")
 local KeybindList = Library:KeybindList()
 
--- Top-level page
+Library:OnUnload(function()
+    print("Library unloaded")
+end)
+
 local Home = Window:Page({ Name = "Home", Columns = 1 })
-local Intro = Home:Section({ Name = "Welcome", Side = 1 })
-Intro:Label("Thanks for using Solix UI.", "Center")
+local Welcome = Home:Section({ Name = "Welcome", Side = 1, Collapsible = true, Default = true })
+Welcome:Label("Solix UI Library", "Center")
 
--- Grouped pages
-local Combat = Window:PageSection({ Name = "Combat", Collapsible = true, Default = true })
-
-local AimbotPage = Combat:Page({ Name = "Aimbot", Columns = 2 })
-local AimSection = AimbotPage:Section({
-    Name = "Silent Aim",
-    Side = 1,
-    Collapsible = true,
-    Default = true
+local Quick = Welcome:Button()
+Quick:Add({
+    Name = "Notify",
+    Callback = function()
+        Library:Notification("Hello!", "Slides in from the right.", 3)
+    end
 })
-
-local Silent = AimSection:Toggle({
-    Name     = "Enabled",
-    Flag     = "SilentEnabled",
-    Default  = false,
-    Callback = function(v) end
-})
-
-Silent:Keybind({
-    Flag    = "SilentKey",
-    Default = Enum.KeyCode.X,
-    Mode    = "Toggle"
-})
-
-Silent:Colorpicker({
-    Flag    = "SilentColor",
-    Default = Color3.fromRGB(255, 100, 255)
-})
-
-AimSection:Slider({
-    Name     = "FOV",
-    Flag     = "SilentFOV",
-    Min      = 10,
-    Max      = 500,
-    Default  = 120,
-    Suffix   = "px"
-})
-
-AimSection:Dropdown({
-    Name    = "Hit Part",
-    Flag    = "HitPart",
-    Items   = {"Head", "Torso", "HumanoidRootPart"},
-    Default = "Head"
-})
-
-local Buttons = AimSection:Button()
-Buttons:Add({
-    Name     = "Reset",
+Quick:Add({
+    Name  = "Modal",
+    Color = Color3.fromRGB(80, 140, 255),
     Callback = function()
         Library:Modal({
-            Title   = "Reset Settings?",
-            Content = "This will restore aimbot defaults.",
+            Title   = "Confirm",
+            Content = "Continue?",
             Buttons = {
-                {"Yes", Color3.fromRGB(80, 200, 120), function()
-                    Library.Flags["SilentEnabled"] = false
-                end},
+                {"Yes", Color3.fromRGB(80, 200, 120), function() end},
                 {"No", nil, function() end}
             }
         })
     end
 })
 
--- Settings + autoload
+local Combat = Window:PageSection({ Name = "Combat", Collapsible = true, Default = true })
+local AimbotPage = Combat:Page({ Name = "Aimbot", Columns = 2 })
+
+local Silent = AimbotPage:Section({ Name = "Silent Aim", Side = 1, Collapsible = true })
+Silent:Toggle({ Name = "Enabled", Flag = "SilentEnabled", Default = false })
+Silent:Slider({ Name = "FOV", Flag = "SilentFOV", Min = 10, Max = 500, Default = 120, Suffix = "px" })
+Silent:Dropdown({ Name = "Hit Part", Flag = "HitPart", Items = {"Head", "Torso"}, Default = "Head" })
+Silent:SearchBox({
+    Name = "Priority",
+    Flag = "TargetPriority",
+    Items = {"Closest", "Lowest HP", "Highest HP"},
+    Default = "Closest",
+    Placeholder = "Search...",
+    MaxHeight = 120
+})
+
+local Rage = AimbotPage:Section({ Name = "Rage", Side = 2 })
+Rage:Checkbox({ Name = "Auto Fire", Flag = "AutoFire", Default = false })
+Rage:ToggleDropdown({
+    Name = "Checks",
+    Flag = "AimChecks",
+    Items = {"Wall Check", "Team Check"},
+    Multi = true,
+    Default = {"Team Check"}
+})
+
+local Misc = Window:Page({ Name = "Misc", Columns = 2 })
+local Player = Misc:Section({ Name = "Player", Side = 1 })
+Player:Slider({ Name = "WalkSpeed", Flag = "WalkSpeed", Min = 16, Max = 200, Default = 16 })
+Player:Textbox({ Name = "Webhook", Flag = "Webhook", Placeholder = "https://..." })
+
 Library:CreateSettingsPage(Window, Watermark, KeybindList)
 Library:CheckForAutoLoad()
 ```
+
+---
+
+## Quick Reference — New / Updated APIs
+
+| API | Notes |
+| --- | --- |
+| `Window.MinSize` | `Vector2` minimum size while resizing |
+| `Window.SearchBar` | `false` hides the page search bar |
+| `Window:ToggleUiButton(props)` | Mobile open/close floating button |
+| `Window:PageSection(props)` | Collapsible sidebar group of pages |
+| `PageSection:Page(props)` | Page under a PageSection |
+| `Section.Collapsible` / `Default` | Collapsible content sections |
+| `Section:SearchBox(props)` | Inline searchable list (not a popup) |
+| `Section:Button()` + `:Add({...})` | Table API, optional `Color` |
+| `Library:Modal(props)` | Centered on window, scale animation |
+| `Library:Notification(...)` | Slides from the right, above UI |
+| `Library:OnUnload(fn)` | Cleanup callback before unload |
+| `Library:CloseOpenFrames()` | Closes open dropdowns / pickers |
+
