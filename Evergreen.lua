@@ -126,7 +126,7 @@ local Library = {
     Scheme = {
         BackgroundColor = Color3.fromRGB(51, 51, 51),
         MainColor = Color3.fromRGB(41, 41, 41),
-        AccentColor = Color3.fromRGB(125, 85, 255),
+        AccentColor = Color3.fromRGB(60, 140, 255),
         OutlineColor = Color3.fromRGB(61, 61, 61),
         FontColor = Color3.fromRGB(255, 255, 255),
         Font = Font.fromEnum(Enum.Font.Code),
@@ -1881,16 +1881,16 @@ function BaseGroupbox:AddDropdown(Idx, Info)
     local Menu = New("ScrollingFrame", {
         BackgroundColor3 = "MainColor",
         BorderSizePixel = 0,
-        Position = UDim2.new(0, 0, 1, 4),
-        Size = UDim2.new(1, 0, 0, 0),
+        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.fromOffset(200, 0),
         Visible = false,
-        ZIndex = 50,
+        ZIndex = 100,
         ClipsDescendants = true,
         ScrollBarThickness = 2,
         ScrollBarImageColor3 = Color3.fromRGB(80, 80, 80),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        Parent = Box,
+        Parent = Overlay,
     })
     Library:AddToRegistry(Menu, {
         BackgroundColor3 = "MainColor"
@@ -2033,8 +2033,9 @@ function BaseGroupbox:AddDropdown(Idx, Info)
         end
 
         local VisibleCount = math.min(#Values, MaxVisible)
-        local MenuHeight = VisibleCount * 24 + 8
-        Menu.Size = UDim2.new(1, 0, 0, MenuHeight)
+        local MenuHeight = math.max(VisibleCount * 24 + 8, 32)
+        local BoxWidth = math.max(Box.AbsoluteSize.X, 120)
+        Menu.Size = UDim2.fromOffset(BoxWidth, MenuHeight)
     end
 
     --@
@@ -2043,8 +2044,14 @@ function BaseGroupbox:AddDropdown(Idx, Info)
             return
         end
         Dropdown.Open = true
-        Menu.Visible = true
         RefreshList()
+
+        local AbsPos = Box.AbsolutePosition
+        local AbsSize = Box.AbsoluteSize
+        Menu.Position = UDim2.fromOffset(AbsPos.X, AbsPos.Y + AbsSize.Y + 4)
+        Menu.Size = UDim2.fromOffset(math.max(AbsSize.X, 120), Menu.Size.Y.Offset)
+        Menu.Visible = true
+        Menu.ZIndex = 200
         Arrow.Text = "^"
     end
 
