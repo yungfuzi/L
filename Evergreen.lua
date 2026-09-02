@@ -1221,30 +1221,16 @@ function BaseGroupbox:AddToggle(Idx, Info)
         }))
 
         local BoxStroke = New("UIStroke", {
-            Color = Toggle.Value and "AccentColor" or "OutlineColor",
+            Color = "OutlineColor",
             Thickness = 1.5,
             Parent = Control,
         })
         Library:AddToRegistry(BoxStroke, {
-            Color = function()
-                return Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
-            end
+            Color = "OutlineColor"
         })
 
         if Variant == "checkdot" then
-            Indicator = New("Frame", {
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                BackgroundTransparency = Toggle.Value and 0 or 1,
-                Position = UDim2.fromScale(0.5, 0.5),
-                Size = UDim2.fromOffset(8, 8),
-                Parent = Control,
-            })
-
-            table.insert(Library.Corners, New("UICorner", {
-                CornerRadius = UDim.new(1, 0),
-                Parent = Indicator,
-            }))
+            Indicator = nil
         else
             Indicator = nil
         end
@@ -1261,24 +1247,10 @@ function BaseGroupbox:AddToggle(Idx, Info)
             }):Play()
         else
             local TargetColor = Toggle.Value and Library.Scheme.AccentColor or Color3.fromRGB(30, 30, 30)
-            local StrokeColor = Toggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
 
             TweenService:Create(Control, Library.TweenInfo, {
                 BackgroundColor3 = TargetColor
             }):Play()
-
-            local Stroke = Control:FindFirstChildOfClass("UIStroke")
-            if Stroke then
-                TweenService:Create(Stroke, Library.TweenInfo, {
-                    Color = StrokeColor
-                }):Play()
-            end
-
-            if Indicator then
-                TweenService:Create(Indicator, Library.TweenInfo, {
-                    BackgroundTransparency = Toggle.Value and 0 or 1
-                }):Play()
-            end
         end
     end
 
@@ -1412,48 +1384,20 @@ function BaseGroupbox:AddToggle(Idx, Info)
         }))
 
         local SubStroke = New("UIStroke", {
-            Color = SubDefault and "AccentColor" or "OutlineColor",
+            Color = "OutlineColor",
             Thickness = 1.5,
             Parent = SubControl,
         })
         Library:AddToRegistry(SubStroke, {
-            Color = function()
-                return SubToggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
-            end
+            Color = "OutlineColor"
         })
-
-        local SubIndicator = nil
-        if SubVariant == "checkdot" then
-            SubIndicator = New("Frame", {
-                AnchorPoint = Vector2.new(0.5, 0.5),
-                BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                BackgroundTransparency = SubDefault and 0 or 1,
-                Position = UDim2.fromScale(0.5, 0.5),
-                Size = UDim2.fromOffset(8, 8),
-                Parent = SubControl,
-            })
-            table.insert(Library.Corners, New("UICorner", {
-                CornerRadius = UDim.new(1, 0),
-                Parent = SubIndicator,
-            }))
-        end
 
         local function UpdateSubVisual()
             local TargetColor = SubToggle.Value and Library.Scheme.AccentColor or Color3.fromRGB(30, 30, 30)
-            local StrokeColor = SubToggle.Value and Library.Scheme.AccentColor or Library.Scheme.OutlineColor
 
             TweenService:Create(SubControl, Library.TweenInfo, {
                 BackgroundColor3 = TargetColor
             }):Play()
-            TweenService:Create(SubStroke, Library.TweenInfo, {
-                Color = StrokeColor
-            }):Play()
-
-            if SubIndicator then
-                TweenService:Create(SubIndicator, Library.TweenInfo, {
-                    BackgroundTransparency = SubToggle.Value and 0 or 1
-                }):Play()
-            end
         end
 
         --@
@@ -1796,7 +1740,7 @@ function BaseGroupbox:AddDropdown(Idx, Info)
         Callback = Info.Callback,
         Changed = Info.Changed,
         Flag = typeof(Idx) == "string" and Idx or nil,
-        Open = false,
+        IsOpen = false,
     }
 
     if Multi then
@@ -2043,7 +1987,7 @@ function BaseGroupbox:AddDropdown(Idx, Info)
         if Dropdown.Disabled then
             return
         end
-        Dropdown.Open = true
+        Dropdown.IsOpen = true
         RefreshList()
 
         local AbsPos = Box.AbsolutePosition
@@ -2057,14 +2001,14 @@ function BaseGroupbox:AddDropdown(Idx, Info)
 
     --@
     function Dropdown:Close()
-        Dropdown.Open = false
+        Dropdown.IsOpen = false
         Menu.Visible = false
         Arrow.Text = "v"
     end
 
     --@
     function Dropdown:Toggle()
-        if Dropdown.Open then
+        if Dropdown.IsOpen then
             Dropdown:Close()
         else
             Dropdown:Open()
@@ -2082,7 +2026,7 @@ function BaseGroupbox:AddDropdown(Idx, Info)
         end
 
         ValueText.Text = GetDisplayText()
-        if Dropdown.Open then
+        if Dropdown.IsOpen then
             RefreshList()
         end
 
@@ -2106,7 +2050,7 @@ function BaseGroupbox:AddDropdown(Idx, Info)
     function Dropdown:SetValues(NewValues)
         Values = NewValues or {}
         Dropdown.Values = Values
-        if Dropdown.Open then
+        if Dropdown.IsOpen then
             RefreshList()
         end
         ValueText.Text = GetDisplayText()
@@ -2139,7 +2083,7 @@ function BaseGroupbox:AddDropdown(Idx, Info)
     end)
 
     Library:GiveSignal(UserInputService.InputBegan:Connect(function(Input)
-        if not Dropdown.Open then
+        if not Dropdown.IsOpen then
             return
         end
         if IsClickInput(Input) then
